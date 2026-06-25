@@ -21,16 +21,16 @@ Deferred (extensibility hooks only, not built in this phase): staff Training, QM
 
 | Document | Description | Status |
 |---|---|---|
-| [docs/SSOT.md](docs/SSOT.md) | Single source of truth — glossary, roles, authorization, blinding, ERD, workflows, numbering, NFRs, conventions | Pending |
-| [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | Architecture Decision Record — technology stack | Pending |
-| [docs/adr/0002-blinding-and-decoding.md](docs/adr/0002-blinding-and-decoding.md) | ADR — sample blinding & decoding | Pending |
-| [docs/adr/0003-section-and-facility-scoping.md](docs/adr/0003-section-and-facility-scoping.md) | ADR — section & facility data scoping | Pending |
-| [docs/modules/01-personnel.md](docs/modules/01-personnel.md) | Module spec — Personnel | Pending |
-| [docs/modules/02-inventory-and-procurement.md](docs/modules/02-inventory-and-procurement.md) | Module spec — Inventory & Procurement | Pending |
-| [docs/modules/03-samples-and-client.md](docs/modules/03-samples-and-client.md) | Module spec — Samples & Client | Pending |
-| [docs/modules/04-testing-and-reporting.md](docs/modules/04-testing-and-reporting.md) | Module spec — Testing & Reporting | Pending |
-| [docs/modules/05-equipment-and-traceability.md](docs/modules/05-equipment-and-traceability.md) | Module spec — Equipment & Traceability | Pending |
-| [docs/modules/06-finance-and-payroll.md](docs/modules/06-finance-and-payroll.md) | Module spec — Finance & Payroll | Pending |
+| [docs/SSOT.md](docs/SSOT.md) | Single source of truth — glossary, roles, authorization, blinding, ERD, workflows, numbering, NFRs, conventions | ✅ Complete |
+| [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | Architecture Decision Record — technology stack | ✅ Complete |
+| [docs/adr/0002-blinding-and-decoding.md](docs/adr/0002-blinding-and-decoding.md) | ADR — sample blinding & decoding | ✅ Complete |
+| [docs/adr/0003-section-and-facility-scoping.md](docs/adr/0003-section-and-facility-scoping.md) | ADR — section & facility data scoping | ✅ Complete |
+| [docs/modules/01-personnel.md](docs/modules/01-personnel.md) | Module spec — Personnel | ✅ Complete |
+| [docs/modules/02-inventory-and-procurement.md](docs/modules/02-inventory-and-procurement.md) | Module spec — Inventory & Procurement | ✅ Complete |
+| [docs/modules/03-samples-and-client.md](docs/modules/03-samples-and-client.md) | Module spec — Samples & Client | ✅ Complete |
+| [docs/modules/04-testing-and-reporting.md](docs/modules/04-testing-and-reporting.md) | Module spec — Testing & Reporting | ✅ Complete |
+| [docs/modules/05-equipment-and-traceability.md](docs/modules/05-equipment-and-traceability.md) | Module spec — Equipment & Traceability | ✅ Complete |
+| [docs/modules/06-finance-and-payroll.md](docs/modules/06-finance-and-payroll.md) | Module spec — Finance & Payroll | ✅ Complete |
 
 ## Planned Technology Stack
 
