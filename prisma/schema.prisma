@@ -80,6 +80,25 @@ enum AuditAction {
   LOGIN
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ON_LEAVE
+  HOLIDAY
+}
+
+enum LeaveType {
+  ANNUAL
+  CASUAL
+  SICK
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -139,6 +158,10 @@ model User {
   approvals      ApprovalStep[]
   signatures     Signature[]
   notifications  Notification[]
+  attendances       Attendance[]
+  leaveApplications LeaveApplication[] @relation("LeaveApplicant")
+  leaveDecisions    LeaveApplication[] @relation("LeaveApprover")
+  undertaking       ImpartialityUndertaking?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -369,4 +392,57 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// Personnel: attendance, leave, undertaking (Module 01)
+// ----------------------------------------------------------------------------
+
+// Daily attendance — e-signed check-in/check-out (BR-20). One row per user/day;
+// status reflects leave/holiday integration.
+model Attendance {
+  id         String           @id @default(uuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id])
+  date       DateTime         @db.Date
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     AttendanceStatus @default(PRESENT)
+  facilityId String
+  sectionId  String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+// Leave applications — applications-only, no quota tracking (BR-20).
+model LeaveApplication {
+  id         String      @id @default(uuid())
+  userId     String
+  user       User        @relation("LeaveApplicant", fields: [userId], references: [id])
+  type       LeaveType
+  fromDate   DateTime    @db.Date
+  toDate     DateTime    @db.Date
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  approverId String?
+  approver   User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+  decidedAt  DateTime?
+  facilityId String
+  sectionId  String
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+// Impartiality & Confidentiality undertaking — e-signed once per user.
+model ImpartialityUndertaking {
+  id       String   @id @default(uuid())
+  userId   String   @unique
+  user     User     @relation(fields: [userId], references: [id])
+  version  String   @default("v1")
+  signedAt DateTime @default(now())
 }

@@ -24,3 +24,7 @@ export const canEvaluateCompetence = (d: Designation) =>
 
 /** Only the COO grants/revokes authorizations (SSOT §5, §6). */
 export const canGrantAuthorization = (d: Designation) => d === "COO";
+
+/** Leave approvers: OM, COO, and the RYK Lab Manager (per hierarchy). */
+export const canApproveLeave = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" || d === "COO" || d === "LAB_MANAGER_RYK";
