@@ -75,3 +75,7 @@ export const canInspectGoods = (d: Designation) =>
 /** Store In-charge issues GRNs and approves issue requests (SSOT §5, BR-10/11). */
 export const canManageStore = (d: Designation) =>
   d === "STORE_INCHARGE" || d === "COO";
+
+/** Equipment register, calibration & qualification records: OM / Lab Manager / COO. */
+export const canManageEquipment = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";

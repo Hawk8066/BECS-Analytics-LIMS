@@ -163,6 +163,23 @@ enum IssueStatus {
   REJECTED
 }
 
+enum EquipmentStatus {
+  ACTIVE
+  UNDER_REPAIR
+  RETIRED
+}
+
+enum QualificationType {
+  IQ
+  OQ
+  PQ
+}
+
+enum QualificationResult {
+  PASS
+  FAIL
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -762,6 +779,62 @@ model StockTransaction {
   createdAt   DateTime @default(now())
 
   @@index([storeId])
+}
+
+// ----------------------------------------------------------------------------
+// Equipment & Traceability (Module 05)
+// ----------------------------------------------------------------------------
+
+model Equipment {
+  id         String          @id @default(uuid())
+  assetTag   String          @unique
+  name       String
+  make       String?
+  model      String?
+  serialNo   String?
+  location   String?
+  status     EquipmentStatus @default(ACTIVE)
+  facilityId String
+  sectionId  String
+  createdAt  DateTime        @default(now())
+
+  calibrations   CalibrationRecord[]
+  qualifications Qualification[]
+
+  @@index([facilityId])
+  @@index([sectionId])
+}
+
+// Calibration record. validUntil drives the calibration-validity flag consumed
+// by Testing (BR-13/BR-17). Reference/calibration certificate stored as an Attachment.
+model CalibrationRecord {
+  id                      String    @id @default(uuid())
+  equipmentId             String
+  equipment               Equipment @relation(fields: [equipmentId], references: [id])
+  calibratedOn            DateTime
+  validUntil              DateTime
+  calibratedBy            String? // vendor name or "internal"
+  certificateAttachmentId String?
+  note                    String?
+  createdById             String?
+  createdAt               DateTime  @default(now())
+
+  @@index([equipmentId])
+}
+
+// Equipment qualification — enforced order IQ -> OQ -> PQ (D14).
+model Qualification {
+  id          String              @id @default(uuid())
+  equipmentId String
+  equipment   Equipment           @relation(fields: [equipmentId], references: [id])
+  type        QualificationType
+  result      QualificationResult
+  performedOn DateTime
+  note        String?
+  createdById String?
+  createdAt   DateTime            @default(now())
+
+  @@index([equipmentId])
 }
 
 // Request to move stock from the main store to a sub-store (BR-10).

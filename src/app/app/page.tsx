@@ -38,13 +38,17 @@ export default async function DashboardPage() {
     getAuditLogs(user, { take: 8 }),
   ]);
 
-  const [samplesTotal, samplesAwaiting, prsPending] = await Promise.all([
-    prisma.sample.count({ where: scope }),
-    prisma.sample.count({ where: { ...scope, status: "REGISTERED" } }),
-    prisma.purchaseRequest.count({
-      where: { ...scope, status: { in: ["SUBMITTED", "VERIFIED"] } },
-    }),
-  ]);
+  const [samplesTotal, samplesAwaiting, prsPending, equipNeedsCal] =
+    await Promise.all([
+      prisma.sample.count({ where: scope }),
+      prisma.sample.count({ where: { ...scope, status: "REGISTERED" } }),
+      prisma.purchaseRequest.count({
+        where: { ...scope, status: { in: ["SUBMITTED", "VERIFIED"] } },
+      }),
+      prisma.equipment.count({
+        where: { ...scope, calibrations: { none: { validUntil: { gte: new Date() } } } },
+      }),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -76,6 +80,11 @@ export default async function DashboardPage() {
           value={samplesAwaiting}
         />
         <StatCard label="PRs pending" value={prsPending} hint="Submitted/verified" />
+        <StatCard
+          label="Equipment needing calibration"
+          value={equipNeedsCal}
+          hint="Expired or none"
+        />
       </div>
 
       <div className="space-y-2">

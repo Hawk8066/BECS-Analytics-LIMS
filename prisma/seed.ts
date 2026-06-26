@@ -254,6 +254,46 @@ async function main() {
     }
   }
 
+  // --- Demo equipment (one in-calibration, one expired) ---
+  if (!(await prisma.equipment.findUnique({ where: { assetTag: "EQ-LHR-9001" } }))) {
+    const e1 = await prisma.equipment.create({
+      data: {
+        assetTag: "EQ-LHR-9001",
+        name: "Analytical Balance",
+        make: "Sartorius",
+        facilityId: lahore.id,
+        sectionId: lahoreLab,
+      },
+    });
+    await prisma.calibrationRecord.create({
+      data: {
+        equipmentId: e1.id,
+        calibratedOn: new Date("2026-01-15"),
+        validUntil: new Date("2027-01-15"),
+        calibratedBy: "NPSL",
+      },
+    });
+  }
+  if (!(await prisma.equipment.findUnique({ where: { assetTag: "EQ-LHR-9002" } }))) {
+    const e2 = await prisma.equipment.create({
+      data: {
+        assetTag: "EQ-LHR-9002",
+        name: "pH Meter",
+        make: "Hanna",
+        facilityId: lahore.id,
+        sectionId: lahoreLab,
+      },
+    });
+    await prisma.calibrationRecord.create({
+      data: {
+        equipmentId: e2.id,
+        calibratedOn: new Date("2025-01-10"),
+        validUntil: new Date("2025-12-31"),
+        calibratedBy: "internal",
+      },
+    });
+  }
+
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
   await prisma.sequence.upsert({
