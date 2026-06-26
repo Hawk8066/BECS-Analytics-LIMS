@@ -17,6 +17,7 @@ export default async function AppLayout({
     ? [
         { href: "/app", label: "Dashboard" },
         { href: "/app/personnel", label: "Personnel" },
+        { href: "/app/functions", label: "Functions" },
       ]
     : [{ href: "/app/onboarding", label: "Complete profile" }];
 
