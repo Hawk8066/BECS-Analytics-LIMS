@@ -201,6 +201,11 @@ enum InvoiceStatus {
   PAID
 }
 
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -933,6 +938,55 @@ model Payment {
   createdAt      DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// Versioned salary structure (one current per user). Amounts in PKR paisa;
+// providentFundPct is a whole-number percent of basic.
+model SalaryStructure {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  basic            Int
+  houseRent        Int      @default(0)
+  conveyance       Int      @default(0)
+  medical          Int      @default(0)
+  otherAllowances  Int      @default(0)
+  providentFundPct Int      @default(0)
+  eobi             Int      @default(0)
+  effectiveFrom    DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Monthly payroll run (D4). Posts to the GL on COO approval.
+model PayrollRun {
+  id             String        @id @default(uuid())
+  runNo          String        @unique
+  period         String // "2026-06"
+  status         PayrollStatus @default(DRAFT)
+  facilityId     String
+  createdById    String?
+  approvedById   String?
+  approvedAt     DateTime?
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+
+  items PayrollItem[]
+
+  @@index([facilityId])
+}
+
+model PayrollItem {
+  id            String     @id @default(uuid())
+  runId         String
+  run           PayrollRun @relation(fields: [runId], references: [id])
+  userId        String
+  gross         Int
+  incomeTax     Int        @default(0)
+  providentFund Int        @default(0)
+  eobi          Int        @default(0)
+  advances      Int        @default(0)
+  netPay        Int
+
+  @@index([runId])
 }
 
 // Equipment qualification — enforced order IQ -> OQ -> PQ (D14).

@@ -98,3 +98,8 @@ export const canRecordPayment = (d: Designation) =>
 /** Finance ledger/reports visibility. */
 export const canViewFinance = (d: Designation) =>
   d === "ACCOUNTANT" || d === "COO" || d === "OPERATIONS_MANAGER";
+
+/** Accountant sets salary structures and prepares payroll runs; COO approves. */
+export const canManagePayroll = (d: Designation) =>
+  d === "ACCOUNTANT" || d === "COO";
+export const canApprovePayroll = (d: Designation) => d === "COO";

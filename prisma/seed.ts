@@ -375,6 +375,29 @@ async function main() {
     });
   }
 
+  // --- Salary structures (paisa) for a few employees ---
+  const salaryDefs = [
+    { email: "om@becs.test", basic: 15000000, houseRent: 6000000, conveyance: 2000000, medical: 1000000, providentFundPct: 5, eobi: 25000 },
+    { email: "analyst@becs.test", basic: 8000000, houseRent: 3200000, conveyance: 1000000, medical: 500000, providentFundPct: 5, eobi: 25000 },
+    { email: "accountant@becs.test", basic: 9000000, houseRent: 3600000, conveyance: 1000000, medical: 500000, providentFundPct: 5, eobi: 25000 },
+  ];
+  for (const sd of salaryDefs) {
+    const u = await prisma.user.findUnique({ where: { email: sd.email } });
+    if (u && !(await prisma.salaryStructure.findUnique({ where: { userId: u.id } }))) {
+      await prisma.salaryStructure.create({
+        data: {
+          userId: u.id,
+          basic: sd.basic,
+          houseRent: sd.houseRent,
+          conveyance: sd.conveyance,
+          medical: sd.medical,
+          providentFundPct: sd.providentFundPct,
+          eobi: sd.eobi,
+        },
+      });
+    }
+  }
+
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
   await prisma.sequence.upsert({
