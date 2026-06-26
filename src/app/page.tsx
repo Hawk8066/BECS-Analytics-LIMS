@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const MODULES = [
   { n: "01", name: "Personnel", desc: "HR, functions, competence, authorization, attendance, leave" },
   { n: "02", name: "Inventory & Procurement", desc: "Stores, procurement workflow, vendors, utilities" },
@@ -10,17 +12,25 @@ const MODULES = [
 export default function Home() {
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
-      <header className="mb-10">
-        <p className="text-sm font-medium uppercase tracking-widest text-emerald-600">
-          BECS Analytics
-        </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">
-          Laboratory Management System
-        </h1>
-        <p className="mt-2 text-sm text-zinc-500">
-          Lahore (Parent Lab) &middot; Rahimyar Khan (on-site QC Sub-Lab) &mdash;{" "}
-          <span className="font-medium text-amber-600">Phase 0: Foundation</span>
-        </p>
+      <header className="mb-10 flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-widest text-emerald-600">
+            BECS Analytics
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">
+            Laboratory Management System
+          </h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Lahore (Parent Lab) &middot; Rahimyar Khan (on-site QC Sub-Lab) &mdash;{" "}
+            <span className="font-medium text-amber-600">Phase 1: Personnel</span>
+          </p>
+        </div>
+        <Link
+          href="/login"
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+        >
+          Sign in
+        </Link>
       </header>
 
       <ul className="grid gap-3 sm:grid-cols-2">

@@ -2,15 +2,14 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { verify } from "argon2";
 import { prisma } from "@/lib/db";
-import { grantsCrossSectionRead } from "@/lib/auth/session";
+import { authConfig } from "@/auth.config";
 
-// Auth.js (NextAuth v5) — Credentials provider with JWT sessions.
-// Only ACTIVE users with a password hash can sign in (SSOT §5: account is
-// created on COO approval). Designation/facility/section are carried in the JWT
-// so the two-tier authorization + scoping layers can read them without a DB hit.
+// Full (Node-runtime) Auth.js instance. Credentials provider verifies the
+// Argon2id hash and only lets ACTIVE users in (account is created on COO
+// approval — SSOT §5). Designation/facility/section ride in the JWT.
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
   providers: [
     Credentials({
       credentials: {
@@ -24,7 +23,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash || user.status !== "ACTIVE") return null;
+        // Resigned accounts are blocked; PENDING_* users may sign in but are
+        // gated to onboarding by the app layout until COO approval (SSOT §5).
+        if (!user || !user.passwordHash || user.status === "NON_ACTIVE")
+          return null;
 
         const ok = await verify(user.passwordHash, password);
         if (!ok) return null;
@@ -33,45 +35,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           designation: user.designation,
+          status: user.status,
           facilityId: user.facilityId,
           sectionId: user.sectionId,
         };
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        // `user` is the object returned from authorize() on sign-in.
-        const u = user as unknown as {
-          id: string;
-          designation: string;
-          facilityId: string;
-          sectionId: string;
-        };
-        token.uid = u.id;
-        token.designation = u.designation;
-        token.facilityId = u.facilityId;
-        token.sectionId = u.sectionId;
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (session.user) {
-        const designation = token.designation as
-          | Parameters<typeof grantsCrossSectionRead>[0]
-          | undefined;
-        Object.assign(session.user, {
-          id: token.uid,
-          designation,
-          facilityId: token.facilityId,
-          sectionId: token.sectionId,
-          canReadCrossSection: designation
-            ? grantsCrossSectionRead(designation)
-            : false,
-        });
-      }
-      return session;
-    },
-  },
 });

@@ -1,10 +1,11 @@
-import type { Designation } from "@prisma/client";
+import type { Designation, UserStatus } from "@prisma/client";
 
 // The authenticated principal carried in the session (SSOT §5–§7).
 export interface SessionUser {
   id: string;
   email: string;
   designation: Designation;
+  status: UserStatus;
   facilityId: string;
   sectionId: string;
   roleKeys: string[];
