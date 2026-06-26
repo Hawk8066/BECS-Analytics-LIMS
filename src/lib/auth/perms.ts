@@ -54,3 +54,12 @@ export const canVerifyPR = (d: Designation) =>
 
 /** Only the COO approves Purchase Requests (SSOT §5, BR-1). */
 export const canApprovePR = (d: Designation) => d === "COO";
+
+/** Purchase Officer records quotations and generates POs (SSOT §5); COO admin. */
+export const canRecordQuotation = (d: Designation) =>
+  d === "PURCHASE_OFFICER" || d === "COO";
+export const canGeneratePO = (d: Designation) =>
+  d === "PURCHASE_OFFICER" || d === "COO";
+
+/** Only the COO selects the winning quotation (SSOT §5). */
+export const canSelectQuotation = (d: Designation) => d === "COO";

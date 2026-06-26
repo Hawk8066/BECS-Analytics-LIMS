@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { readScope } from "@/lib/db/scope";
+import { procurementListWhere } from "@/lib/procurement/access";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,7 +27,7 @@ export default async function ProcurementPage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
   const prs = await prisma.purchaseRequest.findMany({
-    where: readScope(user),
+    where: procurementListWhere(user),
     include: { lines: { select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });

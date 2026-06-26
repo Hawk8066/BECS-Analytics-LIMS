@@ -1,12 +1,24 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canApprovePR, canVerifyPR } from "@/lib/auth/perms";
+import {
+  canApprovePR,
+  canGeneratePO,
+  canRecordQuotation,
+  canSelectQuotation,
+  canVerifyPR,
+} from "@/lib/auth/perms";
 import {
   approvePR,
   rejectPR,
   verifyPR,
 } from "@/lib/actions/purchase-requests";
+import {
+  addQuotation,
+  generatePO,
+  selectQuotation,
+} from "@/lib/actions/procurement";
+import { canAccessPR } from "@/lib/procurement/access";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,15 +48,14 @@ export default async function PRDetailPage({
 
   const pr = await prisma.purchaseRequest.findUnique({
     where: { id },
-    include: { lines: true },
+    include: {
+      lines: true,
+      quotations: { include: { vendor: true }, orderBy: { amount: "asc" } },
+      po: { include: { vendor: true } },
+    },
   });
   if (!pr) notFound();
-  if (
-    !user.canReadCrossSection &&
-    (pr.facilityId !== user.facilityId || pr.sectionId !== user.sectionId)
-  ) {
-    notFound();
-  }
+  if (!canAccessPR(user, pr)) notFound();
 
   const requester = await prisma.user.findUnique({
     where: { id: pr.requestedById },
@@ -52,6 +63,14 @@ export default async function PRDetailPage({
   });
   const canVerify = canVerifyPR(user.designation);
   const canApprove = canApprovePR(user.designation);
+
+  const hasFull = pr.lines.some((l) => l.path === "FULL");
+  const showProcurement = pr.status === "APPROVED" || pr.status === "ORDERED";
+  const vendors = showProcurement
+    ? await prisma.vendor.findMany({ orderBy: { company: "asc" } })
+    : [];
+  const pkr = (paisa: number | null | undefined) =>
+    paisa == null ? "—" : "PKR " + (paisa / 100).toLocaleString("en-PK");
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -118,6 +137,171 @@ export default async function PRDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {showProcurement && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {hasFull ? "Quotations & Comparative" : "Purchase Order (simplified)"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hasFull && (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead className="text-right">Select</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pr.quotations.map((q) => (
+                      <TableRow key={q.id}>
+                        <TableCell>{q.vendor.company}</TableCell>
+                        <TableCell>{pkr(q.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          {q.selected ? (
+                            <Badge>Selected</Badge>
+                          ) : (
+                            canSelectQuotation(user.designation) &&
+                            pr.status === "APPROVED" && (
+                              <form action={selectQuotation}>
+                                <input type="hidden" name="prId" value={pr.id} />
+                                <input type="hidden" name="quotationId" value={q.id} />
+                                <Button size="sm" variant="outline" type="submit">
+                                  Select
+                                </Button>
+                              </form>
+                            )
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {pr.quotations.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-muted-foreground">
+                          No quotations yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                {pr.status === "APPROVED" && canRecordQuotation(user.designation) && (
+                  <form
+                    action={addQuotation}
+                    className="flex flex-wrap items-end gap-3 border-t pt-3"
+                  >
+                    <input type="hidden" name="prId" value={pr.id} />
+                    <div className="grid gap-1.5">
+                      <label className="text-xs text-muted-foreground">Vendor</label>
+                      <select
+                        name="vendorId"
+                        required
+                        defaultValue=""
+                        className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                      >
+                        <option value="" disabled>
+                          Select…
+                        </option>
+                        {vendors.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.company}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <label className="text-xs text-muted-foreground">
+                        Amount (PKR)
+                      </label>
+                      <input
+                        name="amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        required
+                        className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                      />
+                    </div>
+                    <Button size="sm" type="submit">
+                      Add quotation
+                    </Button>
+                  </form>
+                )}
+              </>
+            )}
+
+            {pr.status === "APPROVED" &&
+              canGeneratePO(user.designation) &&
+              !pr.po &&
+              (hasFull ? (
+                <form action={generatePO} className="border-t pt-3">
+                  <input type="hidden" name="prId" value={pr.id} />
+                  <Button
+                    type="submit"
+                    disabled={!pr.quotations.some((q) => q.selected)}
+                  >
+                    Generate PO from selected quote
+                  </Button>
+                </form>
+              ) : (
+                <form
+                  action={generatePO}
+                  className="flex flex-wrap items-end gap-3 border-t pt-3"
+                >
+                  <input type="hidden" name="prId" value={pr.id} />
+                  <div className="grid gap-1.5">
+                    <label className="text-xs text-muted-foreground">Vendor</label>
+                    <select
+                      name="vendorId"
+                      required
+                      defaultValue=""
+                      className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                    >
+                      <option value="" disabled>
+                        Select…
+                      </option>
+                      {vendors.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.company}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      Amount (PKR)
+                    </label>
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                    />
+                  </div>
+                  <Button size="sm" type="submit">
+                    Generate PO
+                  </Button>
+                </form>
+              ))}
+
+            {pr.po && (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium">
+                  PO <span className="font-mono">{pr.po.poNo}</span> ·{" "}
+                  <Badge variant="secondary">{pr.po.status}</Badge>
+                </div>
+                <div className="text-muted-foreground">
+                  {pr.po.vendor?.company ?? "—"} · {pkr(pr.po.amount)}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

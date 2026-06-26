@@ -136,7 +136,14 @@ enum PRStatus {
   SUBMITTED
   VERIFIED
   APPROVED
+  ORDERED
   REJECTED
+}
+
+enum POStatus {
+  ISSUED
+  RECEIVED
+  CANCELLED
 }
 
 // ----------------------------------------------------------------------------
@@ -617,6 +624,9 @@ model Vendor {
   createdById   String?
   createdAt     DateTime @default(now())
 
+  quotations     Quotation[]
+  purchaseOrders PurchaseOrder[]
+
   @@index([company])
 }
 
@@ -636,11 +646,45 @@ model PurchaseRequest {
   approvedAt    DateTime?
   createdAt     DateTime @default(now())
 
-  lines PRLine[]
+  lines      PRLine[]
+  quotations Quotation[]
+  po         PurchaseOrder?
 
   @@index([facilityId])
   @@index([sectionId])
   @@index([status])
+}
+
+// Vendor quotation against a PR (full-path scope). The COO selects one; the PO
+// is generated from it (SSOT §10). Amounts in PKR paisa.
+model Quotation {
+  id          String          @id @default(uuid())
+  prId        String
+  pr          PurchaseRequest @relation(fields: [prId], references: [id])
+  vendorId    String
+  vendor      Vendor          @relation(fields: [vendorId], references: [id])
+  amount      Int // PKR paisa
+  note        String?
+  selected    Boolean         @default(false)
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  @@index([prId])
+}
+
+// Purchase Order — one per PR. Generated from the selected quotation (full) or
+// directly after COO approval for simplified-only PRs (BR-9).
+model PurchaseOrder {
+  id         String          @id @default(uuid())
+  poNo       String          @unique
+  prId       String          @unique
+  pr         PurchaseRequest @relation(fields: [prId], references: [id])
+  vendorId   String?
+  vendor     Vendor?         @relation(fields: [vendorId], references: [id])
+  amount     Int?
+  status     POStatus        @default(ISSUED)
+  issuedById String?
+  createdAt  DateTime        @default(now())
 }
 
 model PRLine {

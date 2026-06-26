@@ -54,6 +54,8 @@ async function main() {
     { email: "labmanager.ryk@becs.test", designation: "LAB_MANAGER_RYK", facilityId: ryk.id, sectionId: "RYK_LAB", fullName: "Lab Manager (RYK)" },
     { email: "analyst@becs.test", designation: "ANALYST", facilityId: lahore.id, sectionId: "LAHORE_LAB", fullName: "Lahore Analyst" },
     { email: "liaison@becs.test", designation: "LIAISON_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Liaison Officer" },
+    { email: "purchaser@becs.test", designation: "PURCHASE_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Purchase Officer" },
+    { email: "accountant@becs.test", designation: "ACCOUNTANT", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Accountant" },
   ];
 
   for (const u of users) {
