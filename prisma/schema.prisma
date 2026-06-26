@@ -99,6 +99,20 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum SampleStatus {
+  REGISTERED
+  ASSIGNED
+  RESULTS_ENTERED
+  VERIFIED
+  APPROVED
+  REPORTED
+}
+
+enum MethodType {
+  ADOPTED
+  LAB_DEVELOPED
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -445,4 +459,93 @@ model ImpartialityUndertaking {
   user     User     @relation(fields: [userId], references: [id])
   version  String   @default("v1")
   signedAt DateTime @default(now())
+}
+
+// ----------------------------------------------------------------------------
+// Samples & Client (Module 03) + Testing master data (Module 04)
+// ----------------------------------------------------------------------------
+
+model Client {
+  id            String   @id @default(uuid())
+  clientNo      String   @unique
+  company       String
+  address       String?
+  contactPerson String?
+  contactNumber String?
+  email         String?
+  sector        String?
+  facilityId    String // owning facility (RYK client = Bio Tech Fertilizers)
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  samples Sample[]
+
+  @@index([facilityId])
+}
+
+// Master parameter (Module 04 owns these; Samples reads them). `accredited`
+// drives the List of Accredited Parameters. Price in PKR paisa (SSOT §15).
+model Parameter {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  unit       String?
+  accredited Boolean  @default(false)
+  price      Int? // PKR paisa
+  createdAt  DateTime @default(now())
+
+  sampleParameters SampleParameter[]
+}
+
+model TestMethod {
+  id        String     @id @default(uuid())
+  code      String     @unique
+  name      String
+  type      MethodType @default(ADOPTED)
+  createdAt DateTime   @default(now())
+
+  sampleParameters SampleParameter[]
+}
+
+// A registered sample. `labId` is the coded identifier seen by analysts/OM
+// (blinding, SSOT §8). The clientId link is access-gated in the app layer.
+model Sample {
+  id              String       @id @default(uuid())
+  labId           String       @unique
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id])
+  sampleType      String
+  clientSampleRef String? // client-supplied sample id (not identity-revealing)
+  priority        String?
+  instructions    String?
+  thirdPartyName  String? // report issued in the name of a third party
+  status          SampleStatus @default(REGISTERED)
+  facilityId      String
+  sectionId       String
+  registeredById  String?
+  assignedToId    String? // analyst assigned by OM / Lab Manager (RYK)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  parameters SampleParameter[]
+
+  @@index([clientId])
+  @@index([facilityId])
+  @@index([sectionId])
+  @@index([status])
+}
+
+// A test line item on a sample (sample × parameter). Result entry + raw-data
+// photo are added in the Testing increment.
+model SampleParameter {
+  id           String      @id @default(uuid())
+  sampleId     String
+  sample       Sample      @relation(fields: [sampleId], references: [id])
+  parameterId  String
+  parameter    Parameter   @relation(fields: [parameterId], references: [id])
+  testMethodId String?
+  testMethod   TestMethod? @relation(fields: [testMethodId], references: [id])
+  resultValue  String?
+  createdAt    DateTime    @default(now())
+
+  @@index([sampleId])
 }

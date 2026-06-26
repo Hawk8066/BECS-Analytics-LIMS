@@ -38,6 +38,11 @@ export default async function DashboardPage() {
     getAuditLogs(user, { take: 8 }),
   ]);
 
+  const [samplesTotal, samplesAwaiting] = await Promise.all([
+    prisma.sample.count({ where: scope }),
+    prisma.sample.count({ where: { ...scope, status: "REGISTERED" } }),
+  ]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -62,6 +67,11 @@ export default async function DashboardPage() {
         />
         <StatCard label="Leave pending" value={pendingLeave} />
         <StatCard label="Checked in today" value={presentToday} />
+        <StatCard label="Samples (scope)" value={samplesTotal} />
+        <StatCard
+          label="Samples awaiting assignment"
+          value={samplesAwaiting}
+        />
       </div>
 
       <div className="space-y-2">

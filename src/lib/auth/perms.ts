@@ -28,3 +28,11 @@ export const canGrantAuthorization = (d: Designation) => d === "COO";
 /** Leave approvers: OM, COO, and the RYK Lab Manager (per hierarchy). */
 export const canApproveLeave = (d: Designation) =>
   d === "OPERATIONS_MANAGER" || d === "COO" || d === "LAB_MANAGER_RYK";
+
+/** Client registration: Liaison Officer (SSOT §5); COO as admin. */
+export const canRegisterClient = (d: Designation) =>
+  d === "LIAISON_OFFICER" || d === "COO";
+
+/** Sample registration: LO at Lahore, Lab Manager at RYK (SSOT §5, D17); COO admin. */
+export const canRegisterSample = (d: Designation) =>
+  d === "LIAISON_OFFICER" || d === "LAB_MANAGER_RYK" || d === "COO";

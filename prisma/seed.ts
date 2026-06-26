@@ -86,7 +86,68 @@ async function main() {
     });
   }
 
-  console.log("Seeded facilities, sections, users, and functions.");
+  // --- Parameters (master; RYK ones are accredited) ---
+  const parameters = [
+    { name: "BAZ", unit: "%", accredited: true, price: 500000 },
+    { name: "Total Zinc", unit: "%", accredited: true, price: 600000 },
+    { name: "Citrate-Soluble P2O5", unit: "%", accredited: true, price: 700000 },
+    { name: "Nitrogen", unit: "%", accredited: true, price: 450000 },
+    { name: "pH", unit: "", accredited: false, price: 200000 },
+    { name: "Moisture", unit: "%", accredited: false, price: 250000 },
+  ];
+  for (const p of parameters) {
+    await prisma.parameter.upsert({
+      where: { name: p.name },
+      update: {},
+      create: p,
+    });
+  }
+
+  // --- Test methods (master) ---
+  const methods = [
+    { code: "TM-014", name: "Test Method TM-014", type: "ADOPTED" as const },
+    { code: "AOAC-965.09", name: "AOAC 965.09", type: "ADOPTED" as const },
+    { code: "INHOUSE-ZN", name: "In-house Zinc Method", type: "LAB_DEVELOPED" as const },
+  ];
+  for (const m of methods) {
+    await prisma.testMethod.upsert({
+      where: { code: m.code },
+      update: {},
+      create: m,
+    });
+  }
+
+  // --- Clients ---
+  await prisma.client.upsert({
+    where: { clientNo: "CLI-00001" },
+    update: {},
+    create: {
+      clientNo: "CLI-00001",
+      company: "Bio Tech Fertilizers (Pvt) Ltd",
+      sector: "Fertilizer",
+      facilityId: ryk.id,
+    },
+  });
+  await prisma.client.upsert({
+    where: { clientNo: "CLI-00002" },
+    update: {},
+    create: {
+      clientNo: "CLI-00002",
+      company: "AgriCorp (Pvt) Ltd",
+      sector: "Agriculture",
+      facilityId: lahore.id,
+    },
+  });
+
+  // Initialise the CLIENT number sequence past the seeded clients so generated
+  // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
+  await prisma.sequence.upsert({
+    where: { key: "CLIENT" },
+    update: {},
+    create: { key: "CLIENT", prefix: "CLI", counter: 2 },
+  });
+
+  console.log("Seeded facilities, sections, users, functions, parameters, methods, clients.");
   console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
 }
 
