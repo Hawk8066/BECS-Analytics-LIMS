@@ -25,6 +25,7 @@ Deferred (extensibility hooks only, not built in this phase): staff Training, QM
 | [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | Architecture Decision Record — technology stack | ✅ Complete |
 | [docs/adr/0002-blinding-and-decoding.md](docs/adr/0002-blinding-and-decoding.md) | ADR — sample blinding & decoding | ✅ Complete |
 | [docs/adr/0003-section-and-facility-scoping.md](docs/adr/0003-section-and-facility-scoping.md) | ADR — section & facility data scoping | ✅ Complete |
+| [docs/adr/0004-finance-accounting-model.md](docs/adr/0004-finance-accounting-model.md) | ADR — finance accounting model (double-entry GL) | ✅ Complete |
 | [docs/modules/01-personnel.md](docs/modules/01-personnel.md) | Module spec — Personnel | ✅ Complete |
 | [docs/modules/02-inventory-and-procurement.md](docs/modules/02-inventory-and-procurement.md) | Module spec — Inventory & Procurement | ✅ Complete |
 | [docs/modules/03-samples-and-client.md](docs/modules/03-samples-and-client.md) | Module spec — Samples & Client | ✅ Complete |
