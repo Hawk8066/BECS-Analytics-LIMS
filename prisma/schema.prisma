@@ -1,0 +1,372 @@
+// BECS Analytics LIMS — Prisma schema
+// Phase 0 (Foundation): facilities/sections, users & the authorization chain,
+// and the cross-cutting subsystems (audit log, attachments, approvals,
+// signatures, numbering, notifications). Module-specific models (samples,
+// procurement, equipment, finance) are added in their respective phases.
+//
+// Conventions (SSOT §15): PascalCase models; UUID PKs; every scoped record
+// carries facilityId/sectionId; monetary values (later modules) are BigInt paisa.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext, pgcrypto]
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum FacilityCode {
+  LAHORE // Parent Lab
+  RYK    // Rahimyar Khan on-site QC Sub-Lab
+}
+
+enum SectionType {
+  LAHORE_LAB
+  RYK_LAB
+  MANAGEMENT
+}
+
+enum Designation {
+  COO
+  OPERATIONS_MANAGER
+  LAB_MANAGER_RYK
+  ANALYST
+  LAB_ASSISTANT
+  LAB_ATTENDANT
+  LIAISON_OFFICER
+  ACCOUNTANT
+  PURCHASE_OFFICER
+  STORE_INCHARGE
+  IT_OFFICER
+  SALES_MARKETING_OFFICER
+}
+
+// Lifecycle of a person/account through the split-entry onboarding (Module 01).
+enum UserStatus {
+  PENDING_PROFILE  // OM created shell; user must complete details
+  PENDING_APPROVAL // user submitted; awaiting COO approval
+  ACTIVE
+  NON_ACTIVE       // resigned (BR-12: retained, never hard-deleted)
+}
+
+enum AuthorizationStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SIGN
+  DECODE
+  LOGIN
+}
+
+// ----------------------------------------------------------------------------
+// Facilities & sections (SSOT §4, §7)
+// ----------------------------------------------------------------------------
+
+model Facility {
+  id        String       @id @default(uuid())
+  code      FacilityCode @unique
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  sections Section[]
+  users    User[]
+}
+
+model Section {
+  id         String      @id @default(uuid())
+  type       SectionType @unique
+  name       String
+  facilityId String
+  facility   Facility    @relation(fields: [facilityId], references: [id])
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  users User[]
+
+  @@index([facilityId])
+}
+
+// ----------------------------------------------------------------------------
+// Users, profiles & RBAC (Tier 1)  —  SSOT §6
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String? // null until account is activated (Argon2id)
+  status       UserStatus  @default(PENDING_PROFILE)
+  designation  Designation
+  facilityId   String
+  sectionId    String
+  facility     Facility    @relation(fields: [facilityId], references: [id])
+  section      Section     @relation(fields: [sectionId], references: [id])
+
+  // org hierarchy (reports-to)
+  managerId String?
+  manager   User?   @relation("UserManager", fields: [managerId], references: [id])
+  reports   User[]  @relation("UserManager")
+
+  profile        PersonnelProfile?
+  roles          UserRole[]
+  competences    CompetenceEvaluation[] @relation("Subject")
+  evaluated      CompetenceEvaluation[] @relation("Evaluator")
+  authorizations Authorization[]        @relation("AuthSubject")
+  grantedAuths   Authorization[]        @relation("AuthGrantedBy")
+  auditLogs      AuditLog[]
+  approvals      ApprovalStep[]
+  signatures     Signature[]
+  notifications  Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([facilityId])
+  @@index([sectionId])
+  @@index([managerId])
+}
+
+// Full HR profile (Module 01). OM enters the shell fields on User; the user
+// completes the rest here; COO approval flips User.status to ACTIVE.
+model PersonnelProfile {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id])
+  title                 String?
+  fullName              String
+  fatherName            String?
+  dateOfBirth           DateTime?
+  cnic                  String?   @unique
+  contactNumber         String?
+  bloodGroup            String?
+  emergencyContact      String?
+  education             String?
+  experience            String?
+  publications          String?
+  trainings             String?
+  skills                String?
+  dateOfJoining         DateTime?
+  completedByUserAt     DateTime?
+  approvedByCooAt       DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  permissions RolePermission[]
+  users       UserRole[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique // e.g. "vendor.register", "client.read"
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+// ----------------------------------------------------------------------------
+// Authorization chain (Tier 2): Function -> Competence -> Authorization
+// SSOT §6
+// ----------------------------------------------------------------------------
+
+model Function {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. "RUN_TM_014", "SIGN_FINAL_REPORT"
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  approvedAt  DateTime? // COO approval to make the Function available
+
+  competences    CompetenceEvaluation[]
+  authorizations Authorization[]
+}
+
+model CompetenceEvaluation {
+  id          String   @id @default(uuid())
+  subjectId   String
+  subject     User     @relation("Subject", fields: [subjectId], references: [id])
+  functionId  String
+  function    Function @relation(fields: [functionId], references: [id])
+  evaluatorId String
+  evaluator   User     @relation("Evaluator", fields: [evaluatorId], references: [id])
+  result      String // pass/score/notes
+  evaluatedAt DateTime @default(now())
+  validUntil  DateTime?
+
+  @@index([subjectId])
+  @@index([functionId])
+}
+
+model Authorization {
+  id           String              @id @default(uuid())
+  subjectId    String
+  subject      User                @relation("AuthSubject", fields: [subjectId], references: [id])
+  functionId   String
+  function     Function            @relation(fields: [functionId], references: [id])
+  grantedById  String // COO
+  grantedBy    User                @relation("AuthGrantedBy", fields: [grantedById], references: [id])
+  status       AuthorizationStatus @default(ACTIVE)
+  effectiveAt  DateTime            @default(now())
+  expiresAt    DateTime?
+  createdAt    DateTime            @default(now())
+
+  @@unique([subjectId, functionId])
+  @@index([functionId])
+}
+
+// ----------------------------------------------------------------------------
+// Cross-cutting subsystems
+// ----------------------------------------------------------------------------
+
+// Immutable audit log (BR-5). Append-only; no update/delete in app code.
+model AuditLog {
+  id         String      @id @default(uuid())
+  actorId    String?
+  actor      User?       @relation(fields: [actorId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  facilityId String?
+  sectionId  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+// Polymorphic attachments (CoA, MSDS, cal certs, quotations, raw-data photos,
+// sealed reports). Versioned + controlled-doc status.
+model Attachment {
+  id           String   @id @default(uuid())
+  ownerType    String // e.g. "AnalysisRawData", "Equipment"
+  ownerId      String
+  kind         String // e.g. "RAW_DATA_PHOTO", "COA", "MSDS"
+  fileName     String
+  contentType  String
+  storageKey   String // S3/MinIO object key
+  sha256       String?
+  version      Int      @default(1)
+  status       String   @default("DRAFT") // DRAFT | APPROVED | OBSOLETE
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+}
+
+// Generic approval routing (SSOT §10). Attaches to any approvable document.
+model Approval {
+  id         String         @id @default(uuid())
+  subjectType String        // e.g. "PurchaseRequest", "PersonnelProfile"
+  subjectId  String
+  status     ApprovalStatus @default(PENDING)
+  facilityId String?
+  sectionId  String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  steps ApprovalStep[]
+
+  @@index([subjectType, subjectId])
+}
+
+model ApprovalStep {
+  id         String         @id @default(uuid())
+  approvalId String
+  approval   Approval       @relation(fields: [approvalId], references: [id])
+  sequence   Int
+  approverId String?
+  approver   User?          @relation(fields: [approverId], references: [id])
+  role       String? // expected approver role/designation, e.g. "COO"
+  status     ApprovalStatus @default(PENDING)
+  decidedAt  DateTime?
+  comment    String?
+
+  @@index([approvalId])
+}
+
+// E-signature / record-integrity (reports, undertakings, attendance).
+model Signature {
+  id          String   @id @default(uuid())
+  signerId    String
+  signer      User     @relation(fields: [signerId], references: [id])
+  subjectType String
+  subjectId   String
+  meaning     String // "approved", "verified", "checked-in", "undertaking"
+  contentHash String? // hash of the sealed record at signing time
+  signedAt    DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+}
+
+// Gap-free, facility/section-prefixed counters (SSOT §11). One row per series;
+// incremented inside the creating transaction.
+model Sequence {
+  id      String @id @default(uuid())
+  key     String @unique // e.g. "SAMPLE:LHR:2026"
+  prefix  String
+  year    Int?
+  counter Int    @default(0)
+
+  @@index([key])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String // "APPROVAL_PENDING", "CALIBRATION_DUE", ...
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

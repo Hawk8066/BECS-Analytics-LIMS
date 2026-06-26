@@ -1,0 +1,46 @@
+# BECS Analytics LIMS — local/on-prem services
+# Postgres (system of record) + MinIO (S3-compatible object storage).
+# The Next.js app + pg-boss worker are added as services once containerized;
+# for local dev run the app with `npm run dev` against these services.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: becs_lims_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-becs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-becs_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-becs_lims}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-becs} -d ${POSTGRES_DB:-becs_lims}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: becs_lims_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-becs_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-becs_minio_password}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+  minio_data:
