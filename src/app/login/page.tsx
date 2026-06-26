@@ -10,8 +10,8 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import { BecsLogo } from "@/components/becs-logo";
 
 export default function LoginPage() {
   const [error, formAction, pending] = useActionState(authenticate, undefined);
@@ -20,8 +20,10 @@ export default function LoginPage() {
     <main className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">BECS Analytics LIMS</CardTitle>
-          <CardDescription>Sign in to continue</CardDescription>
+          <BecsLogo size={44} className="mb-1" />
+          <CardDescription>
+            Laboratory Management System — sign in to continue
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={formAction} className="grid gap-4">

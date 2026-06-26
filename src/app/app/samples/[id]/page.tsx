@@ -264,7 +264,7 @@ export default async function SampleDetailPage({
                         href={`/api/files/${sp.rawDataAttachmentId}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-emerald-600 hover:underline"
+                        className="text-[#1ca9e6] hover:underline"
                       >
                         photo
                       </a>

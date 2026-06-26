@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { NavLink } from "@/components/nav-link";
+import { BecsLogo } from "@/components/becs-logo";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "./actions";
 
@@ -75,7 +76,9 @@ export default async function AppLayout({
   return (
     <div className="grid min-h-svh grid-cols-[220px_1fr]">
       <aside className="flex flex-col gap-1 overflow-y-auto border-r bg-muted/30 p-4">
-        <div className="mb-2 px-3 text-sm font-semibold">BECS LIMS</div>
+        <div className="mb-3 px-2">
+          <BecsLogo subtitle="LIMS" />
+        </div>
         {groups.map((g) => (
           <div key={g.title} className="mb-1 flex flex-col gap-0.5">
             {g.title && (

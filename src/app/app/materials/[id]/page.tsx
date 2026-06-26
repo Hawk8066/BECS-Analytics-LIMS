@@ -118,7 +118,7 @@ export default async function MaterialDetailPage({
                       href={`/api/files/${a.id}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-emerald-600 hover:underline"
+                      className="text-[#1ca9e6] hover:underline"
                     >
                       {a.fileName}
                     </a>

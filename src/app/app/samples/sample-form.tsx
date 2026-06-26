@@ -86,7 +86,7 @@ export function SampleForm({
             <span>{p.name}</span>
             {p.unit && <span className="text-muted-foreground">({p.unit})</span>}
             {p.accredited && (
-              <span className="rounded bg-emerald-100 px-1 text-xs text-emerald-700">
+              <span className="rounded bg-[#eaf6e2] px-1 text-xs text-[#4e8a2c]">
                 accredited
               </span>
             )}

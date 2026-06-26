@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BecsLogo } from "@/components/becs-logo";
 
 const MODULES = [
   { n: "01", name: "Personnel", desc: "HR, functions, competence, authorization, attendance, leave" },
@@ -14,20 +15,17 @@ export default function Home() {
     <main className="mx-auto max-w-4xl px-6 py-16">
       <header className="mb-10 flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-widest text-emerald-600">
-            BECS Analytics
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">
+          <BecsLogo size={48} />
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-[#0e3a5c]">
             Laboratory Management System
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Lahore (Parent Lab) &middot; Rahimyar Khan (on-site QC Sub-Lab) &mdash;{" "}
-            <span className="font-medium text-amber-600">Phase 1: Personnel</span>
+            Lahore (Parent Lab) &middot; Rahimyar Khan (on-site QC Sub-Lab)
           </p>
         </div>
         <Link
           href="/login"
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           Sign in
         </Link>
@@ -37,7 +35,7 @@ export default function Home() {
         {MODULES.map((m) => (
           <li
             key={m.n}
-            className="rounded-lg border border-zinc-200 p-4 transition-colors hover:border-emerald-400 dark:border-zinc-800"
+            className="rounded-lg border border-zinc-200 p-4 transition-colors hover:border-[#1ca9e6] dark:border-zinc-800"
           >
             <div className="flex items-baseline gap-2">
               <span className="font-mono text-xs text-zinc-400">{m.n}</span>
