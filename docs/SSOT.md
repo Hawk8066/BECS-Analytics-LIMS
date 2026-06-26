@@ -53,9 +53,10 @@ BECS Analytics operates testing/QC laboratories that need to replace manual, pap
 | **IQ / OQ / PQ** | Installation / Operational / Performance Qualification of equipment |
 | **Citrate-Soluble P₂O₅** | Citrate-soluble phosphorus pentoxide — a fertilizer phosphate-availability parameter |
 | **Total Zinc** | Total zinc content parameter (e.g. on Raw Zinc) |
-| **Zabardast Urea, Raw Zinc, AOM, MPF, BAZ** | BECS product / sample / parameter codes used in RYK on-site QC. *Exact technical definitions to be confirmed with BECS lab management; treated as named master-data values in the system.* |
+| **Zabardast Urea, Raw Zinc, AOM, MPF, BAZ** | BECS product / sample / parameter codes used in RYK on-site QC. Seeded as **named master-data values** (parameters are **accredited**); exact technical definitions, units, and test methods to be supplied by BECS before go-live. |
+| **Bio Tech Fertilizers (Pvt) Ltd** | The client billed by the RYK on-site QC lab; receives a **monthly consolidated invoice** for all RYK testing (see §5, [Module 06](modules/06-finance-and-payroll.md)) |
 
-> **Open item:** confirm the precise definitions of BAZ, AOM, MPF and the "Zabardast Urea / Raw Zinc" sample types with BECS so the parameter master data is seeded correctly.
+> **Open item (deferred, non-blocking):** BECS to supply precise definitions, units, and test methods for BAZ, AOM, MPF, Zabardast Urea, and Raw Zinc so the (accredited) parameter master data is finalized. They are recorded as named values until then.
 
 ## 4. Organization, Facilities & Sections
 
@@ -66,7 +67,7 @@ BECS Analytics operates testing/QC laboratories that need to replace manual, pap
 
 **Management hierarchy:** COO → Operations Manager (OM) → { Liaison Officer · Accountant · Purchase Officer · Store In-charge · IT Officer · Sales & Marketing Officer }.
 
-The **COO** is the top approving authority for nearly all controlled actions. The **OM** is the primary operational coordinator (creates profile shells, inspects goods, assigns samples, verifies results).
+The **COO** is the top approving authority for nearly all controlled actions. The **OM** is the primary operational coordinator at **Lahore** (creates profile shells, inspects goods, assigns samples, verifies results). At **RYK** there is **no Liaison Officer and no OM-portal step**: the **Lab Manager (RYK)** performs the local coordinating roles — sample registration, analyst assignment, result verification, and PR verification — with the COO still approving.
 
 ## 5. Roles, Designations & Approval Matrix
 
@@ -79,9 +80,9 @@ This table is the **source of truth for who initiates vs. who approves**. Module
 | Competence evaluation | OM / designated evaluator | — | — | Competence record (precondition for authorization) |
 | Authorization to a Function | OM (proposes) | — | **COO** | User may perform that Function; it appears in their UI |
 | Resignation | OM | — | — | User tagged **non-active** |
-| Daily attendance | User (e-sign) | — | — | Attendance record |
-| Leave application | User | — | Approver per hierarchy | Leave approved/rejected |
-| Purchase Request (PR) | Any employee | — | **COO** | PR approved → quotations may be requested |
+| Daily attendance | User (e-sign **check-in & check-out**) | — | — | Attendance record (leave/holiday auto-integrated) |
+| Leave application | User | — | Approver per hierarchy | Leave approved/rejected (applications only — no quota tracking) |
+| Purchase Request (PR) | Any employee | **OM** (Lahore) / **Lab Manager** (RYK) verifies | **COO** | PR approved → quotations may be requested |
 | Quotations | Purchase Officer | — | — | Quotations recorded against PR |
 | Comparative Statement | Purchase Officer | — | **COO** (selects a quote) | PO may be generated |
 | Purchase Order (PO) | Purchase Officer | — | (per COO quote selection) | PO sent to vendor |
@@ -92,12 +93,15 @@ This table is the **source of truth for who initiates vs. who approves**. Module
 | Vendor registration | Accountant | — | — | Vendor available for procurement |
 | Invoice (vendor side) | Accountant / Purchase Officer | — | — | Payment status tracked |
 | Client registration | Liaison Officer | — | — | Client available |
-| Test request / sample registration | Client or Liaison Officer (Lahore); direct (RYK) | — | — | Sample registered, coded Lab ID assigned |
-| Sample → analyst assignment | OM (OM Portal) | — | — | Analyst can test |
-| Raw data + results | Analyst (blinded) — **uploads photo of raw-data sheet + enters results** | **OM** verifies (reviews uploaded image + results) | **COO** | Report approved → decode |
+| Test request / sample registration | **Lahore:** Client or Liaison Officer · **RYK:** Lab Manager (RYK) (direct) | — | — | Sample registered, coded Lab ID assigned |
+| Sample → analyst assignment | **Lahore:** OM (OM Portal) · **RYK:** Lab Manager (RYK) | — | — | Analyst can test |
+| Raw data + results | Analyst (blinded) — **uploads photo of raw-data sheet + enters results** | **Lahore:** OM verifies · **RYK:** Lab Manager (RYK) verifies (reviews image + results) | **COO** | Report approved → decode |
 | Final report release | System (on COO approval) | — | — | Decoded report shown to Liaison Officer (unique ID + QR + seal) |
 | Client quotation | Liaison Officer / Sales & Marketing Officer | — | — | Quotation issued to client |
 | Client invoice | Liaison Officer | — | — | Invoice issued; revenue recorded |
+| Client payment (incoming) | **Accountant or Liaison Officer** | — | — | Payment recorded; receivable settled |
+| Outgoing payment (vendor/utility/payroll) | Accountant | — | **COO** (every payment) | Payment disbursed |
+| Payroll run (monthly) | Accountant | — | **COO** | Payroll approved & disbursed |
 
 ## 6. Authorization Model
 
@@ -116,7 +120,7 @@ Function ──(competence evaluation)──▶ Competence ──(COO grants)─
 - **Authorization** is granted by the **COO**, tied to the user's **designation**, and carries effective/expiry validity.
 - **Job Description** is *derived* from the set of a person's active Authorizations.
 - **Validity is evaluated at action time and as of the test date.** A lapsed competence/authorization closes the gate and retroactively flags affected results.
-- **Segregation of duty:** the testing chain enforces distinct people — Analyst (performs) → OM (verifies) → COO (approves).
+- **Segregation of duty:** the testing chain enforces distinct people — Analyst (performs) → verifier (**OM** at Lahore / **Lab Manager** at RYK) → COO (approves).
 
 See [ADR-0002](adr/0002-blinding-and-decoding.md) and module spec [04-testing-and-reporting](modules/04-testing-and-reporting.md).
 
@@ -180,9 +184,12 @@ erDiagram
     EQUIPMENT ||--o{ QUALIFICATION : qualified_by
 
     INVOICE ||--o{ PAYMENT : settled_by
-    INVOICE }o--|| REVENUE : recognized_as
-    PURCHASE_ORDER }o--|| EXPENSE : incurs
-    PAYROLL_RECORD }o--|| EXPENSE : incurs
+    CHART_OF_ACCOUNT ||--o{ JOURNAL_LINE : posted_to
+    JOURNAL_ENTRY ||--o{ JOURNAL_LINE : contains
+    INVOICE }o--|| JOURNAL_ENTRY : posts
+    PAYMENT }o--|| JOURNAL_ENTRY : posts
+    PURCHASE_ORDER }o--|| JOURNAL_ENTRY : posts
+    PAYROLL_RECORD }o--|| JOURNAL_ENTRY : posts
 
     AUDIT_LOG }o--|| USER : actor
     APPROVAL }o--|| USER : approver
@@ -197,13 +204,15 @@ Cross-cutting entities attached polymorphically to most others: **`AuditLog`**, 
 
 **Sample → Report lifecycle:**
 
+Registration, assignment, and verification are performed by the **OM** at Lahore and by the **Lab Manager (RYK)** at RYK (D17); the COO approves in both. "Coordinator" below = OM @ Lahore / Lab Manager @ RYK.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> Registered: LO/Client (Lahore) or direct (RYK)
-    Registered --> Assigned: OM assigns analyst
+    [*] --> Registered: Lahore: LO/Client · RYK: Lab Manager (direct)
+    Registered --> Assigned: Coordinator assigns analyst
     Assigned --> ResultsEntered: Analyst uploads raw-data photo + enters results
-    ResultsEntered --> Verified: OM verifies (image + results)
-    ResultsEntered --> Assigned: OM returns for rework
+    ResultsEntered --> Verified: Coordinator verifies (image + results)
+    ResultsEntered --> Assigned: Coordinator returns for rework
     Verified --> Approved: COO approves
     Verified --> Assigned: COO rejects
     Approved --> Decoded: identity re-attached
@@ -216,20 +225,24 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> PR_Submitted: any employee
-    PR_Submitted --> PR_Approved: COO
+    PR_Submitted --> PR_Verified: OM (Lahore) / Lab Manager (RYK)
+    PR_Verified --> PR_Approved: COO
     PR_Approved --> Quotations: Purchase Officer
     Quotations --> Comparative: Purchase Officer
     Comparative --> QuoteSelected: COO selects
     QuoteSelected --> PO_Issued: PO to vendor
-    PO_Issued --> Received: Purchase Officer marks received
-    Received --> Inspected: OM accept/reject
+    PO_Issued --> PartiallyReceived: delivery received (may repeat)
+    PartiallyReceived --> Inspected: OM accept/reject (per delivery)
     Inspected --> GRN_Issued: Store In-charge (accepted)
-    GRN_Issued --> Stocked: main store
+    GRN_Issued --> PartiallyReceived: more deliveries pending
+    GRN_Issued --> Stocked: PO fully received
     Stocked --> Issued: issue request → Store In-charge approves → sub-store
     Issued --> [*]
 ```
 
-**Procurement (simplified path)** — for stationery, sanitary supplies, furniture, PPE, utilities: `Request → COO approves → PO → Received → Inspected → GRN → Stocked` (no quotations/comparative). Calibration and equipment-repair procurement reuse the **full path**.
+**Partial receipts (BR-19):** a PO may be received in **multiple deliveries**, each with its own inspection and GRN, until fully received.
+
+**Path is per line item (BR-18):** a PR may contain **mixed-path** line items; each item is routed down the **full** path or the **simplified** path (no quotations/comparative — stationery, sanitary supplies, furniture, PPE, utilities, BR-9). Calibration and equipment-repair procurement reuse the **full path**.
 
 ## 11. Numbering & Identifier Standards
 
@@ -244,7 +257,9 @@ All identifiers are **gap-free, unique, non-reusable, section/facility-prefixed,
 | GRN | `GRN-LHR-2026-00045` | |
 | Vendor No | `VEN-00123` | Company-wide |
 | Client No | `CLI-00123` | Company-wide |
-| Invoice No | `INV-LHR-2026-00045` | |
+| Invoice No | `INV-LHR-2026-00045` | RYK monthly consolidated invoice to Bio Tech Fertilizers: `INV-RYK-2026-06` (one per month) |
+| Journal Entry No | `JE-2026-000123` | Double-entry GL (BR-16) |
+| Payroll Run No | `PAY-LHR-2026-06` | One run per facility/section per month |
 
 > Counters reset per year per facility where shown. Exact prefixes to be finalized with BECS.
 
@@ -255,7 +270,7 @@ Rules are numbered `BR-n` and referenced by module specs.
 - **BR-1** Most controlled actions require **COO approval** (see §5).
 - **BR-2** A user can perform a Function **only** if they hold a valid, non-expired **Authorization** for it (§6).
 - **BR-3** Analysts and the OM operate on **blinded** samples; identity is revealed only after COO approval (decode) (§8).
-- **BR-4** Reporting enforces **segregation of duty**: Analyst ≠ verifying OM ≠ approving COO.
+- **BR-4** Reporting enforces **segregation of duty**: Analyst ≠ verifier (OM @ Lahore / Lab Manager @ RYK) ≠ approving COO.
 - **BR-5** Every create/update/delete on a controlled record writes an **immutable audit-log** entry.
 - **BR-6** Every record is **scoped** to a facility and section; cross-scope access requires an explicit capability (§7).
 - **BR-7** Identifiers are **gap-free, unique, non-reusable** (§11).
@@ -266,6 +281,12 @@ Rules are numbered `BR-n` and referenced by module specs.
 - **BR-12** A resigned employee is tagged **non-active** and retains historical records (never hard-deleted).
 - **BR-13** Test traceability links each result to **method version, instrument calibration validity, and analyst authorization as of the test date**.
 - **BR-14** Timestamps are **server-authoritative** (NTP-synced); client-supplied times are never trusted for signatures/results.
+- **BR-15** **Every** outgoing payment (vendor, utility, payroll) requires **COO approval** — no threshold.
+- **BR-16** Finance is a **full double-entry general ledger** and the **system of record**; every financial event posts balanced journal entries (Σdebits = Σcredits). Currency is **PKR** only.
+- **BR-17** A result entered on an instrument whose **calibration is expired** as of the test date is **allowed but flagged** (out-of-calibration), not blocked — distinct from authorization, which blocks. Refines BR-13.
+- **BR-18** A PR's procurement path is decided **per line item**; full and simplified items may coexist in one PR.
+- **BR-19** A PO may be received via **partial deliveries**, each independently inspected and GRN'd, until fully received.
+- **BR-20** Attendance is captured as **e-signed check-in/check-out** with automatic **leave/holiday integration**; leave is **applications-only** (no quota/balance tracking).
 
 ## 13. Non-Functional Requirements
 
@@ -276,6 +297,7 @@ Rules are numbered `BR-n` and referenced by module specs.
 - **Performance:** server-side pagination/filtering on all list/log screens; dashboards backed by indexed queries.
 - **Deployment:** on-premise-friendly via Docker Compose; offline-friendly (bundled fonts/assets, no hard CDN dependency); host NTP-synced.
 - **Time:** server-authoritative timestamps only (BR-14).
+- **Financial integrity:** Finance is a **full double-entry GL** and the **system of record** (BR-16); journal entries are balanced and append-only (corrections via reversing entries, never edits); periods are closed and locked. See [ADR-0004](adr/0004-finance-accounting-model.md).
 
 ## 14. Technology Stack & Architecture Summary
 
@@ -293,7 +315,7 @@ Rules are numbered `BR-n` and referenced by module specs.
 | Background jobs | pg-boss (Postgres-backed) |
 | Deployment | Docker Compose (Next.js standalone, Postgres, MinIO, worker) behind TLS reverse proxy |
 
-Full rationale: [ADR-0001](adr/0001-tech-stack.md).
+Full rationale: [ADR-0001](adr/0001-tech-stack.md). The Finance module is a **full double-entry general ledger** and system of record — see [ADR-0004](adr/0004-finance-accounting-model.md).
 
 ## 15. Conventions
 
@@ -303,6 +325,7 @@ Full rationale: [ADR-0001](adr/0001-tech-stack.md).
 - **Commits:** Conventional Commits (`docs:`, `feat:`, `fix:`, scoped e.g. `docs(personnel):`).
 - **Status values:** lifecycle states use the names in §10 state machines.
 - **Dates/times:** stored UTC, server-authoritative; displayed in facility-local time.
+- **Currency:** **PKR** only; monetary amounts stored as integer minor units (paisa) to avoid float error.
 
 ## 16. Deferred-Scope Extensibility Hooks
 
