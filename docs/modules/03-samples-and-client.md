@@ -29,8 +29,8 @@ Authority follows the approval matrix in [SSOT §5](../SSOT.md#5-roles-designati
 | **Liaison Officer (LO)** | Registers clients; fills/submits Lahore test requests; prepares client quotations; **generates client invoices**; receives the **decoded** final report for client release ([SSOT §8](../SSOT.md#8-blinding--decoding-rules)). |
 | **Sales & Marketing Officer** | Prepares client **quotations** (shared with LO per [§5](../SSOT.md#5-roles-designations--approval-matrix)). |
 | **Client** | May fill the Lahore **Test Request** form first (self-service), later confirmed/registered by the LO. |
-| **RYK Lab Manager / RYK personnel** | Registers QC samples **directly** at RYK (no client test-request flow). |
-| **Operations Manager (OM)** | Consumes registered samples in the OM Portal (module 04: assignment/verification). Operates on **blinded** samples only ([BR-3](../SSOT.md#12-global-business-rules-catalog)). |
+| **Lab Manager (RYK)** | At RYK there is **no Liaison Officer** ([SSOT §4](../SSOT.md#4-organization-facilities--sections), D17). The **Lab Manager (RYK)** registers QC samples **directly** at RYK (no client test-request flow) and performs downstream coordination (assignment/verification) per [SSOT §5](../SSOT.md#5-roles-designations--approval-matrix). |
+| **Operations Manager (OM)** | Consumes registered Lahore samples in the OM Portal (module 04: assignment/verification). Operates on **blinded** samples only ([BR-3](../SSOT.md#12-global-business-rules-catalog)). **Not** involved at RYK ([SSOT §4](../SSOT.md#4-organization-facilities--sections)). |
 | **Analyst** | Downstream (module 04); sees coded Lab ID + sample type + parameters only — **never** client identity ([SSOT §8](../SSOT.md#8-blinding--decoding-rules)). |
 | **COO** | Approves the report (module 04), which unlocks **decoding** ([BR-1](../SSOT.md#12-global-business-rules-catalog), [BR-3](../SSOT.md#12-global-business-rules-catalog)). No client-registration approval is required ([§5](../SSOT.md#5-roles-designations--approval-matrix)). |
 
@@ -63,7 +63,7 @@ Each area below has its own **Log** and **Dashboard** per the raw spec.
 | 2 | **List of Clients** | Filterable, server-paged roster of all clients. | LO |
 | 3 | **Client Logs** | Audit trail of client create/update/registration events ([BR-5](../SSOT.md#12-global-business-rules-catalog)). | LO |
 | 4 | **Client Dashboard** | KPIs: active clients, by sector, requests-per-client, outstanding invoices. | LO |
-| 5 | **Sample Registration** | Register a sample → assign **coded Lab ID** + apply **blinding** ([SSOT §8](../SSOT.md#8-blinding--decoding-rules), [§11](../SSOT.md#11-numbering--identifier-standards), [BR-3](../SSOT.md#12-global-business-rules-catalog)). Lahore via Test Request; RYK direct. | LO (Lahore) / RYK personnel (RYK) |
+| 5 | **Sample Registration** | Register a sample → assign **coded Lab ID** + apply **blinding** ([SSOT §8](../SSOT.md#8-blinding--decoding-rules), [§11](../SSOT.md#11-numbering--identifier-standards), [BR-3](../SSOT.md#12-global-business-rules-catalog)). Lahore via Test Request; RYK direct. | LO (Lahore) / Lab Manager (RYK) |
 | 6 | **Samples Log** | Audit/lifecycle log of registered samples (coded view). | LO / OM |
 | 7 | **Samples Dashboard** | KPIs: samples by status ([SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines)), by facility, TAT, priority backlog. | LO / OM |
 | 8 | **List of Accredited Parameters** | Read-only view of parameters the lab is **accredited** to report; **fetched from module 04**. | LO / Client |
@@ -86,9 +86,9 @@ The sample-to-report lifecycle is owned by [SSOT §10](../SSOT.md#10-cross-cutti
 
 ### 5.2 RYK intake (direct path)
 
-1. **Direct Sample Registration.** RYK is an on-site QC lab — **no client test-request flow**. RYK personnel register the sample directly, mainly for the named parameter/sample combinations (§6.4).
+1. **Direct Sample Registration.** RYK is an on-site QC lab — **no client test-request flow** and **no Liaison Officer** ([SSOT §4](../SSOT.md#4-organization-facilities--sections), D17). The **Lab Manager (RYK)** registers the sample directly, mainly for the named (accredited) parameter/sample combinations (§6.4), billed to the client **Bio Tech Fertilizers (Pvt) Ltd** (§6.1).
 2. **Coded Lab ID + blinding.** A coded ID (`RYK-S-2026-000045`) is assigned and blinding applied identically ([SSOT §8](../SSOT.md#8-blinding--decoding-rules), [BR-3](../SSOT.md#12-global-business-rules-catalog)).
-3. **Handoff.** Sample enters **`Registered`** and proceeds per [SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines).
+3. **Handoff.** Sample enters **`Registered`** and proceeds per [SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines); at RYK the **Lab Manager (RYK)** (not the OM) performs the downstream analyst assignment and verification.
 
 > **Emphasis:** the **coded Lab ID** and **blinding** are not a later step — they are applied **atomically at registration** (both paths). From `Registered` onward, no analyst or OM action exposes client identity until **COO approval unlocks decoding** ([SSOT §8](../SSOT.md#8-blinding--decoding-rules)).
 
@@ -99,8 +99,8 @@ stateDiagram-v2
     [*] --> TR_Draft: Lahore — Client/LO fills Test Request
     TR_Draft --> TR_Confirmed: LO validates request
     TR_Confirmed --> Registered: assign CODED Lab ID + apply BLINDING (BR-3)
-    [*] --> Registered: RYK — direct registration (+ coded ID + blinding)
-    Registered --> HandedOff: appears (coded) in OM Portal
+    [*] --> Registered: RYK — Lab Manager (RYK) direct registration (+ coded ID + blinding)
+    Registered --> HandedOff: Lahore → OM Portal · RYK → Lab Manager (RYK)
     HandedOff --> [*]: continues in SSOT §10 (Assigned → … → Released)
 ```
 
@@ -125,12 +125,14 @@ Registered by the LO ([SSOT §5](../SSOT.md#5-roles-designations--approval-matri
 | Sector | enum/string | yes | Drives Client Dashboard segmentation |
 | facilityId / sectionId | scope | yes | Stamped per [SSOT §7](../SSOT.md#7-section--facility-scoping-rules) ([BR-6](../SSOT.md#12-global-business-rules-catalog)) |
 
+> **RYK client (D3):** RYK testing is billed to a **real client**, **Bio Tech Fertilizers (Pvt) Ltd** ([SSOT §3](../SSOT.md#3-glossary--domain-terminology)) — **not** a synthetic internal client. It is seeded as a normal `CLIENT` record scoped to RYK, and **all** RYK samples link to it. Bio Tech receives a **monthly consolidated invoice** (`INV-RYK-2026-06`, one per month) covering all RYK testing; revenue is recognized in [Finance & Payroll (06)](06-finance-and-payroll.md) (§6.5, [SSOT §11](../SSOT.md#11-numbering--identifier-standards)).
+
 ### 6.2 Sample (`SAMPLE`) — module-specific fields
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | Lab ID (coded) | string (gen.) | yes | `LHR-S-2026-000123` / `RYK-S-2026-000045` — the **only** ID analysts/OM see ([SSOT §8](../SSOT.md#8-blinding--decoding-rules), [§11](../SSOT.md#11-numbering--identifier-standards)) |
-| clientId | FK → CLIENT | yes (Lahore) | **Access-gated / blinded link** ([BR-3](../SSOT.md#12-global-business-rules-catalog)); absent for some RYK QC |
+| clientId | FK → CLIENT | yes | **Access-gated / blinded link** ([BR-3](../SSOT.md#12-global-business-rules-catalog)); Lahore → the requesting client, RYK → **Bio Tech Fertilizers (Pvt) Ltd** (D3, §6.1) |
 | Sample Type | string | yes | e.g. Zabardast Urea, Raw Zinc, AOM, MPF (RYK) |
 | Origin path | enum | yes | `TEST_REQUEST` (Lahore) \| `DIRECT` (RYK) |
 | thirdPartyReportName | string | no | Report issued in a third party's name ([SSOT §8](../SSOT.md#8-blinding--decoding-rules)) |
@@ -156,9 +158,9 @@ First filled by **Client or LO**.
 | Priority | enum | yes | |
 | Client Instructions | text | no | |
 
-### 6.4 RYK QC parameter/sample master data (named values)
+### 6.4 RYK QC parameter/sample master data (accredited, named values)
 
-Direct-registration QC focuses mainly on:
+Direct-registration QC focuses mainly on the following **accredited** parameters (D15):
 
 | Parameter | Sample type |
 |---|---|
@@ -167,12 +169,12 @@ Direct-registration QC focuses mainly on:
 | BAZ | AOM |
 | Citrate-Soluble P₂O₅ | MPF |
 
-> Per [SSOT §3](../SSOT.md#3-glossary--domain-terminology), **BAZ / AOM / MPF / Zabardast Urea / Raw Zinc** are treated as **named master-data values**; their exact technical definitions are an **open item** to confirm with BECS lab management (see §11).
+> Per [SSOT §3](../SSOT.md#3-glossary--domain-terminology), these RYK parameters (BAZ, Total Zinc, Citrate-Soluble P₂O₅, …) are **accredited** (D15) and appear on the **List of Accredited Parameters** (Feature 8). They remain seeded as **named master-data values**; their exact definitions, units, and test methods are a **deferred (non-blocking) open item** to be supplied by BECS before go-live (see §11).
 
 ### 6.5 Quotation / Invoice / Complaint (module-specific)
 
 - **Quotation** — line items from the priced-parameter catalogue (module 04); prepared by LO or Sales & Marketing Officer ([§5](../SSOT.md#5-roles-designations--approval-matrix)).
-- **Invoice** — `INV-LHR-2026-00045` ([SSOT §11](../SSOT.md#11-numbering--identifier-standards)); generated by LO; `INVOICE }o--|| REVENUE` recognized by Finance ([SSOT §9](../SSOT.md#9-global-domain-model-erd)).
+- **Invoice** — `INV-LHR-2026-00045` ([SSOT §11](../SSOT.md#11-numbering--identifier-standards)); generated by LO; `INVOICE }o--|| REVENUE` recognized by Finance ([SSOT §9](../SSOT.md#9-global-domain-model-erd)). **RYK consolidated invoice (D3):** RYK testing is **not** invoiced per-sample; instead **Bio Tech Fertilizers (Pvt) Ltd** receives a **monthly consolidated invoice** (`INV-RYK-2026-06`, one per month) covering all RYK testing for the period, flowing to [Finance & Payroll (06)](06-finance-and-payroll.md) for revenue recognition.
 - **Complaint** — client, subject, description, status; CAPA-source hook ([SSOT §16](../SSOT.md#16-deferred-scope-extensibility-hooks)).
 
 ## 7. Screens / Views
@@ -184,7 +186,7 @@ Direct-registration QC focuses mainly on:
 | Client Logs | LO | Audit events per client ([BR-5](../SSOT.md#12-global-business-rules-catalog)) |
 | Client Dashboard | LO | Sector/active/outstanding KPIs |
 | Test Request form | Client / LO | Lahore intake (§6.3) |
-| Sample Registration | LO / RYK | Assign coded Lab ID + blinding |
+| Sample Registration | LO (Lahore) / Lab Manager (RYK) | Assign coded Lab ID + blinding |
 | Samples Log | LO / OM | Coded sample lifecycle list |
 | Samples Dashboard | LO / OM | Status/TAT/priority KPIs |
 | List of Accredited Parameters | LO / Client | Read-only (from module 04) |
@@ -241,15 +243,17 @@ Scenario: Registration assigns a coded Lab ID and blinds the link
 ```
 
 ### US-4 — RYK direct registration
-> As **RYK personnel**, I want to register QC samples directly without a client test request.
+> As the **Lab Manager (RYK)**, I want to register QC samples directly without a client test request (there is no Liaison Officer at RYK).
 
 ```gherkin
 Scenario: Direct QC registration at RYK
-  Given I am at the RYK facility
+  Given I am authenticated as the Lab Manager (RYK) at the RYK facility
   When I register a sample for "BAZ in AOM"
-  Then no client test-request flow is required
+  Then no client test-request flow and no Liaison Officer step are required
+  And the sample is linked to the client "Bio Tech Fertilizers (Pvt) Ltd"
   And a coded Lab ID (RYK-S-YYYY-######) is assigned and blinding applied
   And the sample enters the Registered state
+  And downstream assignment and verification are performed by the Lab Manager (RYK)
 ```
 
 ### US-5 — Third-party report name
@@ -285,6 +289,18 @@ Scenario: LO generates an invoice
   And the invoice is available to Finance for revenue recognition
 ```
 
+### US-7b — RYK monthly consolidated invoice
+> As the **Liaison Officer** (billing role), I want all RYK testing billed to Bio Tech Fertilizers via one monthly consolidated invoice.
+
+```gherkin
+Scenario: Generate the monthly consolidated invoice for RYK
+  Given a billing period (month) with registered RYK samples
+  And all RYK samples are linked to the client "Bio Tech Fertilizers (Pvt) Ltd"
+  When I generate the RYK consolidated invoice for that month
+  Then a single Invoice No (INV-RYK-YYYY-MM) covering all RYK testing in the period is assigned
+  And the invoice is available to Finance for revenue recognition
+```
+
 ### US-8 — Log a complaint
 > As the **Liaison Officer**, I want to log a client complaint so it can be tracked.
 
@@ -312,7 +328,7 @@ These reference the global catalogue ([SSOT §12](../SSOT.md#12-global-business-
 | Depends on / integrates with | What this module consumes or produces |
 |---|---|
 | **[Testing & Reporting (04)](04-testing-and-reporting.md)** | **Fetches** the parameters & test-methods list, the **accredited-parameters** list, and **prices**. Produces the **coded, blinded** `SAMPLE` that module 04 assigns/tests. Receives the **decoded** final report (ID + QR + seal) back at the LO on COO approval ([SSOT §8](../SSOT.md#8-blinding--decoding-rules), [§10](../SSOT.md#10-cross-cutting-workflows--state-machines)). |
-| **[Finance & Payroll (06)](06-finance-and-payroll.md)** | Client **Invoices** generated here flow to Finance for **revenue recognition** (`INVOICE }o--|| REVENUE`, [SSOT §9](../SSOT.md#9-global-domain-model-erd)). |
+| **[Finance & Payroll (06)](06-finance-and-payroll.md)** | Client **Invoices** generated here flow to Finance for **revenue recognition** (`INVOICE }o--|| REVENUE`, [SSOT §9](../SSOT.md#9-global-domain-model-erd)). Includes the **RYK monthly consolidated invoice** to **Bio Tech Fertilizers (Pvt) Ltd** (`INV-RYK-2026-06`, D3, §6.5). |
 | **[Personnel (01)](01-personnel.md)** | Role/Function gating — LO/Sales & Marketing capabilities resolve via the two-tier authorization model ([SSOT §6](../SSOT.md#6-authorization-model)). |
 | **Cross-cutting** | `AuditLog`, `Attachment`, `Sequence` (numbering), `Notification` ([SSOT §9](../SSOT.md#9-global-domain-model-erd)); blinding/decoding enforced in the data-access layer ([SSOT §8](../SSOT.md#8-blinding--decoding-rules)). |
 
@@ -320,11 +336,11 @@ These reference the global catalogue ([SSOT §12](../SSOT.md#12-global-business-
 
 **Open questions**
 
-1. **RYK master-data definitions** — confirm exact technical definitions of **BAZ, AOM, MPF, Zabardast Urea, Raw Zinc** so parameter master data is seeded correctly (per [SSOT §3](../SSOT.md#3-glossary--domain-terminology) open item).
+1. **RYK master-data definitions** *(deferred, non-blocking)* — the RYK parameters are **accredited** (D15) and seeded as **named master-data values**; BECS to supply exact definitions, units, and test methods for **BAZ, AOM, MPF, Zabardast Urea, Raw Zinc** before go-live (per [SSOT §3](../SSOT.md#3-glossary--domain-terminology) deferred item). Recorded as named values until then; does **not** block this build.
 2. **Client-side decode visibility** — confirmed that only the **LO** receives the decoded report; do quotations/invoices ever require the coded↔client link to be visible to Sales & Marketing? (Assumed **no** — Sales & Marketing only prepares quotations from priced parameters.)
 3. **Sample ID vs Lab ID** — the client-supplied **Sample ID** on the test request is distinct from the system **coded Lab ID**; confirm both must be retained and that the client Sample ID is **not** itself blinded (assumed retained, not identity-revealing).
 4. **"Others" parameter governance** — when a client picks "Others", does the new parameter require module-04 onboarding (method/price) before the report can be released? (Assumed **yes** — it cannot be reported until module 04 has a method.)
-5. **RYK clients** — RYK direct registration may have **no external client** (internal QC); confirm whether a synthetic internal "client" is recorded for traceability.
+5. **RYK clients — RESOLVED (D3).** RYK direct registration is billed to a **real client**, **Bio Tech Fertilizers (Pvt) Ltd** (not a synthetic internal client). All RYK samples link to it, and it receives a **monthly consolidated invoice** for all RYK testing (§6.1, §6.5, [SSOT §3](../SSOT.md#3-glossary--domain-terminology)).
 
 **Assumptions**
 
