@@ -13,7 +13,7 @@ The Equipment & Traceability module is the lab's authority on the **physical and
 Its core purpose is twofold:
 
 1. **Lifecycle management** — calibrate and re-calibrate instruments, raise repair requests, run installation/operational/performance qualification, and keep per-asset registers and inventories of chemicals, glassware, and lab supplies.
-2. **Traceability** — expose each instrument's **calibration validity as of a given date** so the Testing & Reporting module can satisfy [BR-13](../SSOT.md#12-global-business-rules-catalog): every result is time-anchored to the method version, the **instrument calibration validity**, and the analyst authorization in force on the test date.
+2. **Traceability** — expose each instrument's **calibration validity as of a given date** so the Testing & Reporting module ([04-testing-and-reporting](./04-testing-and-reporting.md)) can satisfy [BR-13](../SSOT.md#12-global-business-rules-catalog): every result is time-anchored to the method version, the **instrument calibration validity**, and the analyst authorization in force on the test date. A test run on an out-of-calibration instrument is **allowed but flagged**, never blocked ([BR-17](../SSOT.md#12-global-business-rules-catalog)).
 
 Calibration and equipment-repair procurement are **not a new workflow** — they reuse the full procurement path defined in [SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines). This module documents only the equipment-specific *extensions* on top of that path (gate pass, receiving, IQ/OQ/PQ).
 
@@ -42,7 +42,8 @@ Initiator/approver responsibilities are governed by the **approval matrix** in [
 | Chemicals register + lab inventory; CoA & MSDS as Attachments | Goods inspection/GRN engine internals (Module 02) |
 | Glassware register + lab inventory; calibration certificates as Attachments | Finance expense recognition of the PO (Module 06 — Finance) |
 | Lab-supplies register + lab inventory | Test execution & result entry (Module 04 — Testing) |
-| **Exposing calibration validity to the Testing module** (BR-13) | The actual blinding/decoding of samples (Module 04 / [SSOT §8](../SSOT.md#8-blinding--decoding-rules)) |
+| **Exposing calibration validity to the Testing module** (BR-13; out-of-cal tests flagged, not blocked, per BR-17) | The actual blinding/decoding of samples (Module 04 / [SSOT §8](../SSOT.md#8-blinding--decoding-rules)) |
+| Supporting the **accredited RYK parameters** on RYK instruments (Zabardast Urea, Raw Zinc, AOM, MPF, BAZ — named master-data) | RYK parameter technical definitions/units/methods ([SSOT §3](../SSOT.md#3-glossary--domain-terminology), supplied by BECS later) |
 | Per-area Logs & Dashboards (Calibrations, Equipment) | — |
 
 ## 4. Feature List
@@ -162,6 +163,8 @@ Module-specific entities only; relationships into the global model are shown in 
 | `facilityId` / `sectionId` | fk | scoping ([BR-6](../SSOT.md#12-global-business-rules-catalog)) |
 | `status` | enum | `InService`, `OutForRepair`, `OutForCalibration`, `Quarantined`, `Retired` |
 | `requiresCalibration` | bool | drives BR-13 traceability requirement |
+| `currentCalibrationValidUntil` | date | derived from the latest passing `CalibrationRecord.validUntil`; the value the Testing module evaluates for validity as of a test date (BR-13/BR-17) |
+| `calibrationStatusAsOf(date)` | derived | exposes `Valid` / `Expired` for a given date so Testing can **flag** (not block) out-of-cal tests (BR-17) |
 
 ### `CalibrationRecord`
 | Field | Type | Notes |
@@ -169,7 +172,7 @@ Module-specific entities only; relationships into the global model are shown in 
 | `id` | uuid | |
 | `equipmentId` | fk → Equipment | |
 | `calibrationDate` | date | server-authoritative ([BR-14](../SSOT.md#12-global-business-rules-catalog)) |
-| `validFrom` / `validUntil` | date | **the validity window read by Testing (BR-13)** |
+| `validFrom` / `validUntil` | date | **the validity window read by Testing (BR-13)**; `validUntil` is the expiry the Testing module compares against the test date — a test past `validUntil` is **flagged, not blocked** (BR-17) |
 | `performedBy` | string / vendorId | internal or external (`Vendor.field = Calibration`) |
 | `result` | enum | `Pass`, `PassWithAdjustment`, `Fail` |
 | `certificateAttachmentId` | fk → Attachment | the calibration certificate |
@@ -284,6 +287,7 @@ Scenario: A test references calibration validity as of the test date
   Then the test record stores the calibration validity in force on 2026-04-15
   When a test dated 2026-07-10 references that instrument
   Then the instrument is flagged out-of-calibration for that test (BR-13)
+  And the test is still allowed to proceed and record results (BR-17)
 ```
 
 ## 9. Module Business Rules
@@ -293,13 +297,14 @@ Global rules are authoritative in [SSOT §12](../SSOT.md#12-global-business-rule
 | Rule | Statement |
 |---|---|
 | [BR-13](../SSOT.md#12-global-business-rules-catalog) (global) | **Traceability:** a test result links to method version, **instrument calibration validity**, and analyst authorization **as of the test date**. This module is the system of record for the calibration-validity half. |
+| [BR-17](../SSOT.md#12-global-business-rules-catalog) (global) | **Calibration is a flag, not a block:** a result on an instrument whose calibration is expired as of the test date is **allowed but flagged** (refines BR-13). This module exposes the validity status; the Testing module renders the flag. |
 | [BR-1](../SSOT.md#12-global-business-rules-catalog) (global) | Calibration & repair PRs and Comparative Statements require **COO approval/selection**. |
 | [BR-5](../SSOT.md#12-global-business-rules-catalog) (global) | Every create/update/delete on calibration, qualification, gate pass, and inventory records writes an immutable audit-log entry. |
 | [BR-6](../SSOT.md#12-global-business-rules-catalog) (global) | All equipment/inventory records are facility/section scoped; cross-scope read is an explicit capability. |
 | [BR-11](../SSOT.md#12-global-business-rules-catalog) (global) | Returned/received equipment is usable only after **OM inspection (accepted)**; extended here to require IQ+OQ+PQ before `InService`. |
 | [BR-14](../SSOT.md#12-global-business-rules-catalog) (global) | Calibration dates, validity windows and qualification dates are **server-authoritative**. |
 | **BR-EQ-1** | Calibration & equipment-repair requests **reuse the full procurement path** ([SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines)); they are never a simplified-path procurement ([BR-9](../SSOT.md#12-global-business-rules-catalog) does not apply). |
-| **BR-EQ-2** | An instrument with `requiresCalibration = true` and no current valid `CalibrationRecord` is flagged **out-of-calibration**; tests referencing it on such a date are flagged under BR-13. |
+| **BR-EQ-2** | An instrument with `requiresCalibration = true` and no current valid `CalibrationRecord` (i.e. past `validUntil`) is flagged **out-of-calibration**; tests referencing it on such a date are **allowed but flagged** under [BR-17](../SSOT.md#12-global-business-rules-catalog) (refines BR-13), never blocked. |
 | **BR-EQ-3** | A chemical lot cannot be stocked without a **CoA Attachment**, and an **MSDS Attachment** is required per chemical. |
 | **BR-EQ-4** | Glassware cannot be marked **calibrated** without its **calibration-certificate Attachment**. |
 | **BR-EQ-5** | Off-facility repairs require an issued **Gate Pass** before the equipment leaves; return is closed against the same gate pass. |
@@ -310,7 +315,7 @@ Global rules are authoritative in [SSOT §12](../SSOT.md#12-global-business-rule
 | Depends on / integrates with | Direction | What is exchanged |
 |---|---|---|
 | **Module 02 — Inventory & Procurement** | this module → 02 | Calibration & repair requests are PRs that run the **full procurement workflow** ([SSOT §10](../SSOT.md#10-cross-cutting-workflows--state-machines)); receiving/inspection/GRN engine reused. Vendor registration (incl. `field = Calibration / equipment repair`) owned by 02/Accountant. |
-| **Module 04 — Testing & Reporting** | this module → 04 | **Exposes calibration validity** so a test references the instrument's validity **as of the test date** ([BR-13](../SSOT.md#12-global-business-rules-catalog)); out-of-calibration instruments flag affected results. |
+| **Module 04 — Testing & Reporting** ([04-testing-and-reporting](./04-testing-and-reporting.md)) | this module → 04 | **Exposes calibration validity** (`validUntil` / `calibrationStatusAsOf(date)`) so a test references the instrument's validity **as of the test date** ([BR-13](../SSOT.md#12-global-business-rules-catalog)); out-of-calibration instruments **flag** affected results but do **not block** the test ([BR-17](../SSOT.md#12-global-business-rules-catalog)). |
 | **Attachment subsystem** ([SSOT §9](../SSOT.md#9-global-domain-model-erd), [§14](../SSOT.md#14-technology-stack--architecture-summary) MinIO) | this module → cross-cutting | Stores CoA, MSDS, glassware calibration certificates, and calibration certificates. |
 | **Approval / Signature / AuditLog / Sequence / Notification** ([SSOT §9](../SSOT.md#9-global-domain-model-erd)) | cross-cutting | COO approvals, OM IQ/OQ/PQ e-signatures, audit logs, numbered IDs, due/overdue notifications. |
 | **Module 06 — Finance** | 06 ← procurement | Repair/calibration POs incur expenses (`PURCHASE_ORDER }o--|| EXPENSE`, [SSOT §9](../SSOT.md#9-global-domain-model-erd)). |
@@ -323,6 +328,6 @@ Global rules are authoritative in [SSOT §12](../SSOT.md#12-global-business-rule
 | 2 | Whether glassware/lab-supply intake reuses the GRN store flow or a lighter lab-only intake — assumed **"same as inventory"** (full path) per raw spec, pending BECS confirmation. | Open |
 | 3 | Internal (in-house) calibrations vs. external vendor calibrations both supported; `purchaseRequestId` nullable for internal cals. Confirm whether internal calibration needs its own approval. | Open |
 | 4 | Exact gate-pass numbering prefix and whether gate passes apply to on-site vendor visits — assumed off-facility only. | Open |
-| 5 | OQ is listed after PQ in the raw spec; this spec enforces the standard **IQ → OQ → PQ** order. Confirm with BECS lab management. | Assumption |
+| 5 | ~~OQ was listed after PQ in the raw spec.~~ **RESOLVED (D14):** the standard sequence **IQ → OQ → PQ** is enforced throughout this module (workflow, state machine, entity/status fields, Gherkin, BR-EQ-6). | Resolved |
 | 6 | Whether a failed IQ/OQ/PQ auto-raises a new repair request (CAPA-style) — deferred; CAPA is out of scope ([SSOT §16](../SSOT.md#16-deferred-scope-extensibility-hooks)). | Open |
 | 7 | Section/facility prefixes for `assetTag` and `gatePassNo` to be finalized with BECS ([SSOT §11](../SSOT.md#11-numbering--identifier-standards)). | Open |
