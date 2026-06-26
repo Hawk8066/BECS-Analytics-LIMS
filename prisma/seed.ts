@@ -1,5 +1,6 @@
 import { PrismaClient, type Designation, type SectionType } from "@prisma/client";
 import { hash } from "argon2";
+import { createHash } from "crypto";
 
 // Seeds facilities, sections, dev users, and a few functions (SSOT §4, §6).
 // Run with: npx prisma db seed  (requires a running database).
@@ -138,6 +139,67 @@ async function main() {
       facilityId: lahore.id,
     },
   });
+
+  // --- Demo samples (for workflow + report rendering) ---
+  const agri = await prisma.client.findUnique({ where: { clientNo: "CLI-00002" } });
+  const pH = await prisma.parameter.findUnique({ where: { name: "pH" } });
+  const moisture = await prisma.parameter.findUnique({ where: { name: "Moisture" } });
+  const lahoreLab = sectionIds.LAHORE_LAB!;
+  if (agri && pH && moisture) {
+    // S1 — newly registered (awaiting assignment)
+    if (!(await prisma.sample.findUnique({ where: { labId: "LHR-S-2026-900001" } }))) {
+      await prisma.sample.create({
+        data: {
+          labId: "LHR-S-2026-900001",
+          clientId: agri.id,
+          sampleType: "Compost",
+          facilityId: lahore.id,
+          sectionId: lahoreLab,
+          status: "REGISTERED",
+          parameters: {
+            create: [{ parameterId: pH.id }, { parameterId: moisture.id }],
+          },
+        },
+      });
+    }
+    // S2 — fully processed with a final report
+    if (!(await prisma.sample.findUnique({ where: { labId: "LHR-S-2026-900002" } }))) {
+      const s2 = await prisma.sample.create({
+        data: {
+          labId: "LHR-S-2026-900002",
+          clientId: agri.id,
+          sampleType: "Soil",
+          facilityId: lahore.id,
+          sectionId: lahoreLab,
+          status: "REPORTED",
+          parameters: {
+            create: [
+              { parameterId: pH.id, resultValue: "6.8" },
+              { parameterId: moisture.id, resultValue: "12.3" },
+            ],
+          },
+        },
+        include: { parameters: { include: { parameter: true } } },
+      });
+      const snapshot = JSON.stringify({
+        labId: s2.labId,
+        parameters: s2.parameters.map((p) => ({
+          name: p.parameter.name,
+          result: p.resultValue,
+        })),
+      });
+      const contentHash = createHash("sha256").update(snapshot).digest("hex");
+      await prisma.finalReport.create({
+        data: {
+          reportNo: "LHR-R-2026-900002",
+          sampleId: s2.id,
+          contentHash,
+          qrText: `LHR-R-2026-900002|${contentHash.slice(0, 16)}`,
+          decodedAt: new Date(),
+        },
+      });
+    }
+  }
 
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.

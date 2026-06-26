@@ -36,3 +36,10 @@ export const canRegisterClient = (d: Designation) =>
 /** Sample registration: LO at Lahore, Lab Manager at RYK (SSOT §5, D17); COO admin. */
 export const canRegisterSample = (d: Designation) =>
   d === "LIAISON_OFFICER" || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Coordinator: assigns samples to analysts and verifies results (OM / Lab Manager / COO). */
+export const canCoordinateTesting = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Only the COO approves results and releases the final report (SSOT §5, BR-1). */
+export const canApproveSample = (d: Designation) => d === "COO";

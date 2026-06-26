@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { readScope } from "@/lib/db/scope";
 import { canRegisterSample } from "@/lib/auth/perms";
 import { canSeeClientIdentity } from "@/lib/samples/blinding";
+import { sampleListWhere } from "@/lib/samples/access";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -34,7 +34,7 @@ export default async function SamplesPage() {
 
   // Blinding (ADR-0002): client data is only queried for roles allowed to see it.
   const samples = await prisma.sample.findMany({
-    where: readScope(user),
+    where: sampleListWhere(user),
     include: { parameters: { select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });

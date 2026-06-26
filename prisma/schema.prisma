@@ -527,6 +527,7 @@ model Sample {
   updatedAt       DateTime     @updatedAt
 
   parameters SampleParameter[]
+  report     FinalReport?
 
   @@index([clientId])
   @@index([facilityId])
@@ -537,15 +538,37 @@ model Sample {
 // A test line item on a sample (sample × parameter). Result entry + raw-data
 // photo are added in the Testing increment.
 model SampleParameter {
-  id           String      @id @default(uuid())
-  sampleId     String
-  sample       Sample      @relation(fields: [sampleId], references: [id])
-  parameterId  String
-  parameter    Parameter   @relation(fields: [parameterId], references: [id])
-  testMethodId String?
-  testMethod   TestMethod? @relation(fields: [testMethodId], references: [id])
-  resultValue  String?
-  createdAt    DateTime    @default(now())
+  id                  String      @id @default(uuid())
+  sampleId            String
+  sample              Sample      @relation(fields: [sampleId], references: [id])
+  parameterId         String
+  parameter           Parameter   @relation(fields: [parameterId], references: [id])
+  testMethodId        String?
+  testMethod          TestMethod? @relation(fields: [testMethodId], references: [id])
+  resultValue         String?
+  calculations        String?
+  // Result entered on an instrument with lapsed calibration (allowed but
+  // flagged, BR-17). The uploaded raw-data photo is the legal raw record.
+  outOfCalibration    Boolean     @default(false)
+  rawDataAttachmentId String?
+  enteredById         String?
+  enteredAt           DateTime?
+  createdAt           DateTime    @default(now())
 
   @@index([sampleId])
+}
+
+// Final report — created on COO approval. Hash-sealed snapshot + QR (SSOT §11,
+// BR-8). Decoded (client identity revealed) for the LO after approval.
+model FinalReport {
+  id           String    @id @default(uuid())
+  reportNo     String    @unique
+  sampleId     String    @unique
+  sample       Sample    @relation(fields: [sampleId], references: [id])
+  contentHash  String
+  qrText       String
+  approvedById String?
+  approvedAt   DateTime  @default(now())
+  decodedAt    DateTime?
+  createdAt    DateTime  @default(now())
 }
