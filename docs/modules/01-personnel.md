@@ -21,7 +21,7 @@ Roles, the org hierarchy, and the full **initiator → reviewer → approver** m
 |---|---|
 | **COO** | Approves HR profiles, Functions, and Authorizations; top approver for leave per hierarchy. See [SSOT §5](../SSOT.md#5-roles-designations--approval-matrix). |
 | **Operations Manager (OM)** | Creates profile shells; adds/removes/edits Functions (proposes); proposes Authorizations; marks resignations. |
-| **User (any employee)** | Completes own profile detail; marks daily attendance (e-sign); applies for leave; e-signs the Impartiality & Confidentiality undertaking. |
+| **User (any employee)** | Completes own profile detail; e-signs daily attendance check-in **and** check-out; applies for leave; e-signs the Impartiality & Confidentiality undertaking. |
 | **Designated evaluator** | Performs Competence evaluation (may be OM or a senior technical role). |
 | **Leave approver** | Approves/rejects leave per the org hierarchy ([SSOT §4](../SSOT.md#4-organization-facilities--sections)). |
 
@@ -35,8 +35,8 @@ Roles, the org hierarchy, and the full **initiator → reviewer → approver** m
 - Competence Evaluation keyed on Functions.
 - Authorization (COO-granted, designation-linked) and Tier-2 visibility gating.
 - Job Description derivation from active Authorizations.
-- Employee Attendance (daily, user e-sign).
-- Leave application & acceptance.
+- Employee Attendance (daily e-signed check-in & check-out; leave/holiday auto-integrated) ([BR-20](../SSOT.md#12-global-business-rules-catalog)).
+- Leave application & acceptance (applications-only; no balance/quota tracking) ([BR-20](../SSOT.md#12-global-business-rules-catalog)).
 - Impartiality & Confidentiality Policy + e-signed Undertaking.
 - Resignation → non-active tagging with historical retention.
 - Per functional area: **Logs** and **Dashboard**.
@@ -60,8 +60,8 @@ Roles, the org hierarchy, and the full **initiator → reviewer → approver** m
 | F-6 | **Authorization** | Grant the right to perform a Function, tied to designation, with validity. | COO (OM proposes) |
 | F-7 | **Tier-2 capability gating** | Only authorized Functions render and are invokable in the user's UI. | System |
 | F-8 | **Job Description** | Auto-derived, read-only view aggregating a person's active Authorizations. | System |
-| F-9 | **Daily Attendance** | User marks attendance daily via e-signature. | User |
-| F-10 | **Leave application & acceptance** | User applies; approver accepts/rejects per hierarchy. | User / approver |
+| F-9 | **Daily Attendance** | User e-signs a daily **check-in and check-out**; `hoursWorked` derived. Approved-leave days and holidays are auto-integrated (not marked present). | User |
+| F-10 | **Leave application & acceptance** | User applies; approver accepts/rejects per hierarchy. Applications-only — no balances/quotas tracked. | User / approver |
 | F-11 | **Impartiality & Confidentiality Undertaking** | Policy display + e-signed, hash-sealed undertaking. | User |
 | F-12 | **Resignation** | OM marks resign → user tagged non-active; records retained. | OM |
 | F-13 | **Logs** | Per functional area immutable activity logs (reads from AuditLog). | System |
@@ -119,9 +119,14 @@ stateDiagram-v2
     Rejected --> [*]
 ```
 
-### 5.4 Attendance (daily e-sign)
+### 5.4 Attendance (daily e-signed check-in & check-out)
 
-User opens the attendance screen → marks present/checks in → applies **e-signature**. A single immutable attendance record per user per day is created with a **server-authoritative** timestamp ([BR-14](../SSOT.md#12-global-business-rules-catalog)). No approval step.
+Each working day a user records **two** e-signed events on one immutable attendance record ([BR-20](../SSOT.md#12-global-business-rules-catalog)):
+
+1. **Check-in** — user opens the attendance screen → applies **e-signature**; `checkIn` is stamped with a **server-authoritative** timestamp ([BR-14](../SSOT.md#12-global-business-rules-catalog)). State → **CheckedIn**.
+2. **Check-out** — at end of day the user applies **e-signature** again; `checkOut` is stamped (server time) and `hoursWorked` is **derived** from check-in/check-out. State → **CheckedOut**.
+
+There is **no single present-mark** and **no approval step**. **Leave and holidays are integrated automatically:** a day covered by an **approved leave** ([§5.3](#53-leave-application--acceptance)) or a configured holiday is set to status `OnLeave` / `Holiday` and requires no check-in/check-out — such days are **not** marked present.
 
 ### 5.5 Impartiality & Confidentiality Undertaking
 
@@ -201,9 +206,16 @@ Read-only aggregate of a user's **active** Authorizations; not independently edi
 |---|---|---|
 | userId | ref | |
 | date | date | One record per user per day |
-| signatureId | ref | E-signature ([BR-14](../SSOT.md#12-global-business-rules-catalog), server time) |
+| checkIn | timestamp | Server-authoritative check-in time ([BR-14](../SSOT.md#12-global-business-rules-catalog)); null on leave/holiday |
+| checkOut | timestamp | Server-authoritative check-out time; null until checked out / on leave/holiday |
+| hoursWorked | interval | **Derived** from `checkOut − checkIn`; null until checked out |
+| checkInSignatureId | ref | E-signature for check-in |
+| checkOutSignatureId | ref | E-signature for check-out |
+| status | enum | `CheckedIn · CheckedOut · OnLeave · Holiday` — `OnLeave`/`Holiday` auto-set, never present ([BR-20](../SSOT.md#12-global-business-rules-catalog)) |
 
 ### 6.7 LeaveApplication
+
+Leave is **applications-only**: the system tracks individual applications and their decisions but does **not** maintain leave balances, quotas, or entitlements ([BR-20](../SSOT.md#12-global-business-rules-catalog)).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -239,7 +251,7 @@ Read-only aggregate of a user's **active** Authorizations; not independently edi
 
 **Part 3 — Attendance & Leave**
 
-- **Daily attendance** (mark + e-sign).
+- **Daily attendance** (e-signed check-in & check-out; leave/holiday days shown auto-integrated).
 - **Leave application** form + **leave acceptance** queue (approver).
 - **Logs** and **Dashboard**.
 
@@ -317,14 +329,24 @@ Then only Functions for which I hold a valid, non-expired Authorization render a
 And a Function whose Authorization has expired is neither visible nor invokable (BR-2)
 ```
 
-### US-7 — Daily attendance via e-signature
-*As a user, I want to mark my attendance each day with my e-signature.*
+### US-7 — Daily attendance via e-signed check-in & check-out
+*As a user, I want to e-sign a check-in and a check-out each working day so my hours are recorded.*
 
 ```gherkin
 Given I am an authenticated active user
-When I mark my attendance for today and apply my e-signature
-Then an AttendanceRecord is created for me dated today with a server-authoritative timestamp (BR-14)
+When I check in for today and apply my e-signature
+Then an AttendanceRecord is created for me dated today with a server-authoritative checkIn timestamp (BR-14, BR-20)
+And its status becomes "CheckedIn"
 And I cannot create a second attendance record for the same day
+When I later check out and apply my e-signature
+Then the record's checkOut timestamp is stamped server-authoritatively
+And hoursWorked is derived from checkIn and checkOut
+And its status becomes "CheckedOut"
+
+Given today is covered by an approved leave application or a configured holiday
+When the attendance for that day is computed
+Then the record's status is set to "OnLeave" or "Holiday" automatically
+And no check-in or check-out is required and the day is not marked present
 ```
 
 ### US-8 — Leave application and acceptance
@@ -373,6 +395,7 @@ References to the global **BR-n** catalog ([SSOT §12](../SSOT.md#12-global-busi
 | **MR-P6** | Job Description is **derived**, never directly edited. | [SSOT §6](../SSOT.md#6-authorization-model) |
 | **MR-P7** | A resigned employee is tagged **non-active** and never hard-deleted; history is retained. | [BR-12](../SSOT.md#12-global-business-rules-catalog) |
 | **MR-P8** | Attendance, undertaking, and approval timestamps are **server-authoritative**; e-signatures capture signer, meaning, timestamp. | [BR-14](../SSOT.md#12-global-business-rules-catalog), [SSOT §13](../SSOT.md#13-non-functional-requirements) |
+| **MR-P12** | Attendance is an e-signed **check-in and check-out** per day with `hoursWorked` derived; approved-leave days and holidays are auto-integrated and never marked present. Leave is **applications-only** — no balances/quotas are tracked. | [BR-20](../SSOT.md#12-global-business-rules-catalog) |
 | **MR-P9** | Every create/update/delete on a personnel record writes an immutable **AuditLog** entry. | [BR-5](../SSOT.md#12-global-business-rules-catalog) |
 | **MR-P10** | Every personnel record is scoped to a facility and section; cross-scope access is an explicit COO/OM capability. | [BR-6](../SSOT.md#12-global-business-rules-catalog), [SSOT §7](../SSOT.md#7-section--facility-scoping-rules) |
 | **MR-P11** | The Undertaking is an immutable hash-sealed snapshot; amendments create a new linked version. | [BR-8](../SSOT.md#12-global-business-rules-catalog) |
@@ -398,9 +421,9 @@ All authorization checks consumed by other modules are enforced **server-side** 
 | # | Type | Item |
 |---|---|---|
 | **OQ-1** | Open | How does a user authenticate to complete their own profile **before** COO approval creates the full account? (Assumption: a provisional onboarding token/limited session scoped only to the profile-detail form.) |
-| **OQ-2** | Open | Leave **approver routing** — confirm exact approver per designation/section beyond "per hierarchy" ([SSOT §4](../SSOT.md#4-organization-facilities--sections)), and whether leave balances/quotas are tracked. |
+| **OQ-2** | Open / **partly RESOLVED** | Leave **approver routing** — confirm exact approver per designation/section beyond "per hierarchy" ([SSOT §4](../SSOT.md#4-organization-facilities--sections)). **RESOLVED (D9, [BR-20](../SSOT.md#12-global-business-rules-catalog)):** leave is applications-only — **no** balances/quotas/entitlements are tracked. |
 | **OQ-3** | Open | Is **Competence** approved by anyone (the matrix shows no approver) or is the evaluator's record final? Assumed final, with COO approval occurring at the Authorization step. |
-| **OQ-4** | Open | Attendance semantics — single daily present mark vs. check-in/check-out times; handling of attendance on approved-leave days and at RYK (on-site) vs. Lahore. |
+| **OQ-4** | **RESOLVED** | Attendance semantics (D8, [BR-20](../SSOT.md#12-global-business-rules-catalog)): attendance is an e-signed **check-in and check-out** per day (not a single present mark), with `hoursWorked` derived. Approved-leave days and holidays are **auto-integrated** (`OnLeave`/`Holiday` status) and never marked present. *(RYK on-site vs. Lahore handling, if any, remains a minor open item.)* |
 | **OQ-5** | Open | Designation enumeration and which designations may be created per section; whether one user can hold multiple designations. |
 | **OQ-6** | Assumption | Profile **edits after activation** (e.g. updated contact, new publication) follow the same split ownership and are audited; material changes may require re-approval — to confirm. |
 | **OQ-7** | Assumption | Removing/expiring a Function or Authorization soft-disables it (never hard-deletes) to preserve traceability of past results ([BR-13](../SSOT.md#12-global-business-rules-catalog)). |
