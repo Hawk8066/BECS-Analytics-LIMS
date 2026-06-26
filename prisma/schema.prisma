@@ -187,6 +187,20 @@ enum MaterialType {
   LAB_SUPPLY
 }
 
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIAL
+  PAID
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -552,7 +566,8 @@ model Client {
   createdById   String?
   createdAt     DateTime @default(now())
 
-  samples Sample[]
+  samples  Sample[]
+  invoices Invoice[]
 
   @@index([facilityId])
 }
@@ -848,6 +863,76 @@ model MaterialItem {
 
   @@index([facilityId])
   @@index([type])
+}
+
+// ----------------------------------------------------------------------------
+// Finance & Payroll (Module 06) — full double-entry GL (ADR-0004, BR-16)
+// ----------------------------------------------------------------------------
+
+model ChartOfAccount {
+  id    String      @id @default(uuid())
+  code  String      @unique
+  name  String
+  type  AccountType
+  lines JournalLine[]
+}
+
+// A balanced journal entry (sum debits = sum credits). Append-only (BR-16);
+// corrections via reversing entries. Amounts in PKR paisa.
+model JournalEntry {
+  id          String       @id @default(uuid())
+  entryNo     String       @unique
+  date        DateTime     @default(now())
+  memo        String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  lines JournalLine[]
+}
+
+model JournalLine {
+  id        String         @id @default(uuid())
+  entryId   String
+  entry     JournalEntry   @relation(fields: [entryId], references: [id])
+  accountId String
+  account   ChartOfAccount @relation(fields: [accountId], references: [id])
+  debit     Int            @default(0) // paisa
+  credit    Int            @default(0) // paisa
+
+  @@index([entryId])
+  @@index([accountId])
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  invoiceNo      String        @unique
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+  amount         Int // paisa
+  status         InvoiceStatus @default(ISSUED)
+  memo           String?
+  issuedById     String?
+  journalEntryId String?
+  facilityId     String
+  createdAt      DateTime      @default(now())
+
+  payments Payment[]
+
+  @@index([clientId])
+  @@index([facilityId])
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  amount         Int // paisa
+  method         String?
+  receivedById   String?
+  journalEntryId String?
+  createdAt      DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 // Equipment qualification — enforced order IQ -> OQ -> PQ (D14).

@@ -55,6 +55,13 @@ export default async function AppLayout({
             { href: "/app/materials", label: "Materials" },
           ],
         },
+        {
+          title: "Finance & Payroll",
+          items: [
+            { href: "/app/finance", label: "Ledger" },
+            { href: "/app/finance/invoices", label: "Invoices" },
+          ],
+        },
       ]
     : [
         {

@@ -86,3 +86,15 @@ export const canManageMaterials = (d: Designation) =>
   d === "LAB_MANAGER_RYK" ||
   d === "STORE_INCHARGE" ||
   d === "COO";
+
+/** Client invoices: LO generates them (SSOT §5); Accountant/COO too. */
+export const canIssueInvoice = (d: Designation) =>
+  d === "LIAISON_OFFICER" || d === "ACCOUNTANT" || d === "COO";
+
+/** Incoming client payments recordable by Accountant or LO (D6); COO admin. */
+export const canRecordPayment = (d: Designation) =>
+  d === "ACCOUNTANT" || d === "LIAISON_OFFICER" || d === "COO";
+
+/** Finance ledger/reports visibility. */
+export const canViewFinance = (d: Designation) =>
+  d === "ACCOUNTANT" || d === "COO" || d === "OPERATIONS_MANAGER";

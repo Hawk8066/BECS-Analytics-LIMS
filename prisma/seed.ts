@@ -322,6 +322,59 @@ async function main() {
     }
   }
 
+  // --- Chart of accounts (double-entry GL, ADR-0004) ---
+  const accounts: { code: string; name: string; type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE" }[] = [
+    { code: "1000", name: "Cash", type: "ASSET" },
+    { code: "1010", name: "Bank", type: "ASSET" },
+    { code: "1100", name: "Accounts Receivable", type: "ASSET" },
+    { code: "2000", name: "Accounts Payable", type: "LIABILITY" },
+    { code: "3000", name: "Owner's Equity", type: "EQUITY" },
+    { code: "4000", name: "Sales Revenue", type: "REVENUE" },
+    { code: "5000", name: "Operating Expenses", type: "EXPENSE" },
+    { code: "5100", name: "Payroll Expense", type: "EXPENSE" },
+  ];
+  for (const a of accounts) {
+    await prisma.chartOfAccount.upsert({
+      where: { code: a.code },
+      update: {},
+      create: a,
+    });
+  }
+
+  // --- Demo invoice with its balanced journal entry (Dr AR / Cr Revenue) ---
+  const agriClient = await prisma.client.findUnique({ where: { clientNo: "CLI-00002" } });
+  const arAcct = await prisma.chartOfAccount.findUnique({ where: { code: "1100" } });
+  const revAcct = await prisma.chartOfAccount.findUnique({ where: { code: "4000" } });
+  if (
+    agriClient &&
+    arAcct &&
+    revAcct &&
+    !(await prisma.invoice.findUnique({ where: { invoiceNo: "INV-LHR-2026-90001" } }))
+  ) {
+    const amount = 5000000; // PKR 50,000.00 in paisa
+    const entry = await prisma.journalEntry.create({
+      data: {
+        entryNo: "JE-2026-900001",
+        memo: "Invoice INV-LHR-2026-90001",
+        lines: {
+          create: [
+            { accountId: arAcct.id, debit: amount },
+            { accountId: revAcct.id, credit: amount },
+          ],
+        },
+      },
+    });
+    await prisma.invoice.create({
+      data: {
+        invoiceNo: "INV-LHR-2026-90001",
+        clientId: agriClient.id,
+        amount,
+        journalEntryId: entry.id,
+        facilityId: lahore.id,
+      },
+    });
+  }
+
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
   await prisma.sequence.upsert({
