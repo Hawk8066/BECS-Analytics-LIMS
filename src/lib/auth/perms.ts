@@ -79,3 +79,10 @@ export const canManageStore = (d: Designation) =>
 /** Equipment register, calibration & qualification records: OM / Lab Manager / COO. */
 export const canManageEquipment = (d: Designation) =>
   d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Materials register (chemicals/CRM/glassware/lab supplies) + certificate intake. */
+export const canManageMaterials = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "STORE_INCHARGE" ||
+  d === "COO";

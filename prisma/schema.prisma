@@ -180,6 +180,13 @@ enum QualificationResult {
   FAIL
 }
 
+enum MaterialType {
+  CHEMICAL
+  CRM // Certified Reference Material
+  GLASSWARE
+  LAB_SUPPLY
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -820,6 +827,27 @@ model CalibrationRecord {
   createdAt               DateTime  @default(now())
 
   @@index([equipmentId])
+}
+
+// Consumable / reference materials register (Module 05): chemicals (CoA/MSDS),
+// CRM (reference certificate + certified value), glassware (cal certs), lab
+// supplies. Certificates are stored as polymorphic Attachments
+// (ownerType="MaterialItem"). CRM/chemical lots carry lot + expiry.
+model MaterialItem {
+  id             String       @id @default(uuid())
+  type           MaterialType
+  name           String
+  lotNo          String?
+  certifiedValue String? // CRM
+  expiry         DateTime?
+  unit           String?
+  facilityId     String
+  sectionId      String
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  @@index([facilityId])
+  @@index([type])
 }
 
 // Equipment qualification — enforced order IQ -> OQ -> PQ (D14).

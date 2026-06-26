@@ -50,7 +50,10 @@ export default async function AppLayout({
         },
         {
           title: "Equipment & Traceability",
-          items: [{ href: "/app/equipment", label: "Equipment" }],
+          items: [
+            { href: "/app/equipment", label: "Equipment" },
+            { href: "/app/materials", label: "Materials" },
+          ],
         },
       ]
     : [

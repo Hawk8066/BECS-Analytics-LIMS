@@ -294,6 +294,34 @@ async function main() {
     });
   }
 
+  // --- Demo materials (chemical w/o CoA, CRM, glassware) ---
+  const matDefs: {
+    type: "CHEMICAL" | "CRM" | "GLASSWARE" | "LAB_SUPPLY";
+    name: string;
+    lotNo?: string;
+    certifiedValue?: string;
+    unit?: string;
+  }[] = [
+    { type: "CHEMICAL", name: "Sulfuric Acid 98%", lotNo: "SA-2026-01", unit: "L" },
+    { type: "CRM", name: "Zinc Reference Standard", certifiedValue: "99.99% ± 0.01", lotNo: "ZN-CRM-07", unit: "g" },
+    { type: "GLASSWARE", name: "Volumetric Flask 100mL", lotNo: "VF-100-12", unit: "pc" },
+  ];
+  for (const m of matDefs) {
+    if (!(await prisma.materialItem.findFirst({ where: { name: m.name, type: m.type } }))) {
+      await prisma.materialItem.create({
+        data: {
+          type: m.type,
+          name: m.name,
+          lotNo: m.lotNo ?? null,
+          certifiedValue: m.certifiedValue ?? null,
+          unit: m.unit ?? null,
+          facilityId: lahore.id,
+          sectionId: lahoreLab,
+        },
+      });
+    }
+  }
+
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
   await prisma.sequence.upsert({
