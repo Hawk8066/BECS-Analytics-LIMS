@@ -115,6 +115,7 @@ enum MethodType {
 
 enum ItemCategory {
   CHEMICAL
+  CRM // Certified Reference Material (full path; tracked in Equipment & Traceability)
   EQUIPMENT
   EQUIPMENT_SUPPLY
   GLASSWARE

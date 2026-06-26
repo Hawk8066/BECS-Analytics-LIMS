@@ -151,6 +151,7 @@ Module-specific entities. Cross-cutting entities (`AuditLog`, `Attachment`, `App
 | Category | Simplified path? |
 |---|---|
 | Chemicals | No (full) |
+| Certified Reference Material (CRM) | No (full) — also tracked in module 05 |
 | Equipment | No (full) |
 | Equipment Supplies | No (full) |
 | Glassware | No (full) |

@@ -83,6 +83,16 @@ Each feature notes its **primary role**. Logs and Dashboards exist per area (Cal
 | Certificate of Analysis (CoA) | Per-lot CoA stored as an **Attachment** ([SSOT §9 cross-cutting](../SSOT.md#9-global-domain-model-erd)) | OM / Store In-charge |
 | Material Safety Data Sheet (MSDS) | Per-chemical MSDS stored as an **Attachment** | OM / Store In-charge |
 
+### 4.3.1 Certified Reference Materials (CRM)
+
+| Feature | Description | Primary role |
+|---|---|---|
+| List & Lab Inventory of CRMs | Master list + per-lab stock of certified reference materials | Store In-charge / Analyst |
+| Reference Certificate | Per-lot certificate (certified value, uncertainty, traceability) stored as an **Attachment** | OM / Store In-charge |
+| Certified value, lot & expiry | Tracked per CRM; expiry drives due/expired flags on the dashboard | Store In-charge |
+
+CRMs are procured via the **full** procurement path (Module 02, category **CRM**) and, like chemicals, **cannot be stocked without their reference certificate**. They are the reference materials consumed by the deferred Quality Control module (in-house RM work).
+
 ### 4.4 Glassware
 
 | Feature | Description | Primary role |

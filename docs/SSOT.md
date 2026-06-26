@@ -50,6 +50,7 @@ BECS Analytics operates testing/QC laboratories that need to replace manual, pap
 | **Comparative Statement** | Side-by-side comparison of vendor quotations used to select a quote |
 | **CoA** | Certificate of Analysis (for chemicals/reference materials) |
 | **MSDS** | Material Safety Data Sheet |
+| **CRM** | Certified Reference Material — a reference standard with a certified value, lot, and expiry. Procured via Inventory & Procurement (full path) and tracked with its reference certificate in Equipment & Traceability; also the QC reference material used by the deferred Quality Control module |
 | **IQ / OQ / PQ** | Installation / Operational / Performance Qualification of equipment |
 | **Citrate-Soluble P₂O₅** | Citrate-soluble phosphorus pentoxide — a fertilizer phosphate-availability parameter |
 | **Total Zinc** | Total zinc content parameter (e.g. on Raw Zinc) |
