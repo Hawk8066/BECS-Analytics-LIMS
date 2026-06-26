@@ -56,6 +56,7 @@ async function main() {
     { email: "liaison@becs.test", designation: "LIAISON_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Liaison Officer" },
     { email: "purchaser@becs.test", designation: "PURCHASE_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Purchase Officer" },
     { email: "accountant@becs.test", designation: "ACCOUNTANT", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Accountant" },
+    { email: "store@becs.test", designation: "STORE_INCHARGE", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Store In-charge" },
   ];
 
   for (const u of users) {
@@ -238,6 +239,19 @@ async function main() {
         },
       },
     });
+  }
+
+  // --- Stores (one main + sub-stores) ---
+  const storeDefs: { name: string; type: "MAIN" | "SUB"; facilityId: string }[] = [
+    { name: "Lahore Main Store", type: "MAIN", facilityId: lahore.id },
+    { name: "Lahore Lab Store", type: "SUB", facilityId: lahore.id },
+    { name: "RYK Lab Store", type: "SUB", facilityId: ryk.id },
+    { name: "Lahore Management Store", type: "SUB", facilityId: lahore.id },
+  ];
+  for (const s of storeDefs) {
+    if (!(await prisma.store.findFirst({ where: { name: s.name } }))) {
+      await prisma.store.create({ data: s });
+    }
   }
 
   // Initialise the CLIENT number sequence past the seeded clients so generated

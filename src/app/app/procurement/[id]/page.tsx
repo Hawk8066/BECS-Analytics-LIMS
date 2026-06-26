@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import {
   canApprovePR,
   canGeneratePO,
+  canInspectGoods,
+  canManageStore,
+  canMarkReceived,
   canRecordQuotation,
   canSelectQuotation,
   canVerifyPR,
@@ -19,6 +22,11 @@ import {
   selectQuotation,
 } from "@/lib/actions/procurement";
 import { canAccessPR } from "@/lib/procurement/access";
+import {
+  inspectReceipt,
+  issueGRN,
+  markReceived,
+} from "@/lib/actions/receiving";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -51,7 +59,12 @@ export default async function PRDetailPage({
     include: {
       lines: true,
       quotations: { include: { vendor: true }, orderBy: { amount: "asc" } },
-      po: { include: { vendor: true } },
+      po: {
+        include: {
+          vendor: true,
+          receipts: { include: { grn: true }, orderBy: { receivedAt: "asc" } },
+        },
+      },
     },
   });
   if (!pr) notFound();
@@ -298,6 +311,101 @@ export default async function PRDetailPage({
                   {pr.po.vendor?.company ?? "—"} · {pkr(pr.po.amount)}
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {pr.po && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Goods Receiving</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {canMarkReceived(user.designation) && (
+              <form action={markReceived}>
+                <input type="hidden" name="poId" value={pr.po.id} />
+                <Button size="sm" type="submit">
+                  Mark delivery received
+                </Button>
+              </form>
+            )}
+            {pr.po.receipts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No deliveries yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Received</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>GRN</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pr.po.receipts.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-muted-foreground">
+                        {r.receivedAt.toISOString().slice(0, 10)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            r.status === "ACCEPTED"
+                              ? "default"
+                              : r.status === "REJECTED"
+                                ? "destructive"
+                                : "outline"
+                          }
+                        >
+                          {r.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {r.grn?.grnNo ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {r.status === "PENDING_INSPECTION" &&
+                          canInspectGoods(user.designation) && (
+                            <form
+                              action={inspectReceipt}
+                              className="flex justify-end gap-2"
+                            >
+                              <input type="hidden" name="receiptId" value={r.id} />
+                              <Button
+                                size="sm"
+                                type="submit"
+                                name="decision"
+                                value="ACCEPTED"
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                                name="decision"
+                                value="REJECTED"
+                              >
+                                Reject
+                              </Button>
+                            </form>
+                          )}
+                        {r.status === "ACCEPTED" &&
+                          !r.grn &&
+                          canManageStore(user.designation) && (
+                            <form action={issueGRN}>
+                              <input type="hidden" name="receiptId" value={r.id} />
+                              <Button size="sm" type="submit">
+                                Issue GRN
+                              </Button>
+                            </form>
+                          )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>

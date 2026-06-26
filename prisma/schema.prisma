@@ -146,6 +146,23 @@ enum POStatus {
   CANCELLED
 }
 
+enum StoreType {
+  MAIN
+  SUB
+}
+
+enum ReceiptStatus {
+  PENDING_INSPECTION
+  ACCEPTED
+  REJECTED
+}
+
+enum IssueStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -685,6 +702,83 @@ model PurchaseOrder {
   status     POStatus        @default(ISSUED)
   issuedById String?
   createdAt  DateTime        @default(now())
+
+  receipts GoodsReceipt[]
+}
+
+// A store: one MAIN (Lahore) + SUB stores. New goods enter the main store via
+// GRN, then move to sub-stores via issue requests (BR-10).
+model Store {
+  id         String    @id @default(uuid())
+  name       String
+  type       StoreType
+  facilityId String
+  createdAt  DateTime  @default(now())
+
+  stock StockTransaction[]
+  grns  GRN[]
+}
+
+// A delivery against a PO. Multiple per PO supports partial receipts (BR-19).
+model GoodsReceipt {
+  id           String        @id @default(uuid())
+  poId         String
+  po           PurchaseOrder @relation(fields: [poId], references: [id])
+  receivedById String?
+  receivedAt   DateTime      @default(now())
+  status       ReceiptStatus @default(PENDING_INSPECTION)
+  inspectedById String?
+  inspectedAt  DateTime?
+  note         String?
+
+  grn GRN?
+
+  @@index([poId])
+}
+
+// Goods Receiving Note — issued by the Store In-charge after accepted inspection
+// (BR-11); credits stock into the main store.
+model GRN {
+  id             String       @id @default(uuid())
+  grnNo          String       @unique
+  goodsReceiptId String       @unique
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id])
+  storeId        String
+  store          Store        @relation(fields: [storeId], references: [id])
+  issuedById     String?
+  createdAt      DateTime     @default(now())
+}
+
+// Stock movement ledger. Balance per (store, description) = sum(quantity).
+model StockTransaction {
+  id          String   @id @default(uuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  description String
+  quantity    Int // + in / - out
+  reason      String // GRN | ISSUE_OUT | ISSUE_IN
+  refType     String?
+  refId       String?
+  createdAt   DateTime @default(now())
+
+  @@index([storeId])
+}
+
+// Request to move stock from the main store to a sub-store (BR-10).
+model IssueRequest {
+  id            String      @id @default(uuid())
+  requestedById String
+  fromStoreId   String
+  toStoreId     String
+  description   String
+  quantity      Int
+  status        IssueStatus @default(PENDING)
+  approvedById  String?
+  decidedAt     DateTime?
+  facilityId    String
+  createdAt     DateTime    @default(now())
+
+  @@index([status])
 }
 
 model PRLine {

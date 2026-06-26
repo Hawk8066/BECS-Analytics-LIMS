@@ -63,3 +63,15 @@ export const canGeneratePO = (d: Designation) =>
 
 /** Only the COO selects the winning quotation (SSOT §5). */
 export const canSelectQuotation = (d: Designation) => d === "COO";
+
+/** Purchase Officer marks goods received (SSOT §5); COO admin. */
+export const canMarkReceived = (d: Designation) =>
+  d === "PURCHASE_OFFICER" || d === "COO";
+
+/** Goods inspection: OM @ Lahore / Lab Manager @ RYK accept/reject (SSOT §5). */
+export const canInspectGoods = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Store In-charge issues GRNs and approves issue requests (SSOT §5, BR-10/11). */
+export const canManageStore = (d: Designation) =>
+  d === "STORE_INCHARGE" || d === "COO";
