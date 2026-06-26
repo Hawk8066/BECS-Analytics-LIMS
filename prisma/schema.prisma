@@ -113,6 +113,31 @@ enum MethodType {
   LAB_DEVELOPED
 }
 
+enum ItemCategory {
+  CHEMICAL
+  EQUIPMENT
+  EQUIPMENT_SUPPLY
+  GLASSWARE
+  LAB_SUPPLY
+  STATIONERY
+  SANITARY
+  FURNITURE
+  PPE
+  UTILITY
+}
+
+enum ProcurementPath {
+  FULL // requires quotations + comparative (BR-9)
+  SIMPLIFIED // PO-only after COO approval
+}
+
+enum PRStatus {
+  SUBMITTED
+  VERIFIED
+  APPROVED
+  REJECTED
+}
+
 // ----------------------------------------------------------------------------
 // Facilities & sections (SSOT §4, §7)
 // ----------------------------------------------------------------------------
@@ -571,4 +596,61 @@ model FinalReport {
   approvedAt   DateTime  @default(now())
   decodedAt    DateTime?
   createdAt    DateTime  @default(now())
+}
+
+// ----------------------------------------------------------------------------
+// Inventory & Procurement (Module 02)
+// ----------------------------------------------------------------------------
+
+model Vendor {
+  id            String   @id @default(uuid())
+  vendorNo      String   @unique
+  company       String
+  address       String?
+  contactNumber String?
+  ntn           String?
+  stn           String?
+  employees     Int?
+  fields        String[] // categories supplied (Equipment, Chemicals, Calibration, ...)
+  accountNumber String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@index([company])
+}
+
+// Purchase Request (SSOT §10): initiator -> verifier (OM @ Lahore / Lab Manager
+// @ RYK, D18) -> COO approves. Mixed-path PRs allowed; path is per line (D10/BR-18).
+model PurchaseRequest {
+  id            String   @id @default(uuid())
+  prNo          String   @unique
+  requestedById String
+  status        PRStatus @default(SUBMITTED)
+  note          String?
+  facilityId    String
+  sectionId     String
+  verifiedById  String?
+  verifiedAt    DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  lines PRLine[]
+
+  @@index([facilityId])
+  @@index([sectionId])
+  @@index([status])
+}
+
+model PRLine {
+  id          String          @id @default(uuid())
+  prId        String
+  pr          PurchaseRequest @relation(fields: [prId], references: [id])
+  description String
+  category    ItemCategory
+  path        ProcurementPath
+  quantity    Int             @default(1)
+  unit        String?
+
+  @@index([prId])
 }

@@ -40,6 +40,13 @@ export default async function AppLayout({
             { href: "/app/parameters", label: "Parameters" },
           ],
         },
+        {
+          title: "Inventory & Procurement",
+          items: [
+            { href: "/app/vendors", label: "Vendors" },
+            { href: "/app/procurement", label: "Purchase Requests" },
+          ],
+        },
       ]
     : [
         {

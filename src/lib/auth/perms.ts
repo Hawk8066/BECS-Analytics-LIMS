@@ -43,3 +43,14 @@ export const canCoordinateTesting = (d: Designation) =>
 
 /** Only the COO approves results and releases the final report (SSOT §5, BR-1). */
 export const canApproveSample = (d: Designation) => d === "COO";
+
+/** Vendor registration by the Accountant (SSOT §5); COO admin. */
+export const canRegisterVendor = (d: Designation) =>
+  d === "ACCOUNTANT" || d === "COO";
+
+/** PR verification: OM @ Lahore / Lab Manager @ RYK before COO approval (D18). */
+export const canVerifyPR = (d: Designation) =>
+  d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Only the COO approves Purchase Requests (SSOT §5, BR-1). */
+export const canApprovePR = (d: Designation) => d === "COO";

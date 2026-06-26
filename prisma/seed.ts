@@ -201,6 +201,43 @@ async function main() {
     }
   }
 
+  // --- Demo vendor + purchase request ---
+  if (!(await prisma.vendor.findUnique({ where: { vendorNo: "VEN-90001" } }))) {
+    await prisma.vendor.create({
+      data: {
+        vendorNo: "VEN-90001",
+        company: "ChemSupply Co",
+        fields: ["Chemicals", "Lab Supplies"],
+        ntn: "1234567-8",
+      },
+    });
+  }
+  const analystUser = await prisma.user.findUnique({
+    where: { email: "analyst@becs.test" },
+  });
+  if (
+    analystUser &&
+    !(await prisma.purchaseRequest.findUnique({
+      where: { prNo: "PR-LHR-2026-90001" },
+    }))
+  ) {
+    await prisma.purchaseRequest.create({
+      data: {
+        prNo: "PR-LHR-2026-90001",
+        requestedById: analystUser.id,
+        facilityId: lahore.id,
+        sectionId: lahoreLab,
+        note: "Monthly lab consumables",
+        lines: {
+          create: [
+            { description: "Sulfuric acid 2.5L", category: "CHEMICAL", path: "FULL", quantity: 4, unit: "btl" },
+            { description: "A4 paper", category: "STATIONERY", path: "SIMPLIFIED", quantity: 10, unit: "ream" },
+          ],
+        },
+      },
+    });
+  }
+
   // Initialise the CLIENT number sequence past the seeded clients so generated
   // client numbers (CLI-00003+) don't collide with CLI-00001/00002.
   await prisma.sequence.upsert({
