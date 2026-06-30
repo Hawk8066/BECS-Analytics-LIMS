@@ -5,6 +5,7 @@ import { readScope } from "@/lib/db/scope";
 import { canApproveLeave } from "@/lib/auth/perms";
 import { decideLeave } from "@/lib/actions/leave";
 import { LeaveForm } from "./leave-form";
+import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,7 +30,7 @@ const STATUS_VARIANT: Record<string, "default" | "outline" | "destructive"> = {
 };
 
 function d(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return formatDate(date);
 }
 
 export default async function LeavePage() {

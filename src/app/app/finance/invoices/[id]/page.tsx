@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
+import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/db";
 import {
   canIssueInvoice,
@@ -100,7 +101,7 @@ export default async function InvoiceDetailPage({
               {invoice.payments.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-muted-foreground">
-                    {p.createdAt.toISOString().slice(0, 10)}
+                    {formatDate(p.createdAt)}
                   </TableCell>
                   <TableCell>{p.method || "—"}</TableCell>
                   <TableCell className="text-right">{pkr(p.amount)}</TableCell>

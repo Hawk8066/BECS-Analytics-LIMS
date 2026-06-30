@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { verify } from "argon2";
 import { prisma } from "@/lib/db";
 import { authConfig } from "@/auth.config";
+import { writeAudit } from "@/lib/audit/audit-log";
 
 // Full (Node-runtime) Auth.js instance. Credentials provider verifies the
 // Argon2id hash and only lets ACTIVE users in (account is created on COO
@@ -10,6 +11,23 @@ import { authConfig } from "@/auth.config";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   session: { strategy: "jwt" },
+  // Record every successful sign-in in the immutable audit log (BR-5). The
+  // app-level audit trail thus covers authentication as well as data changes.
+  events: {
+    async signIn({ user }) {
+      if (!user?.id) return;
+      try {
+        await writeAudit({
+          actorId: user.id,
+          action: "LOGIN",
+          entityType: "User",
+          entityId: user.id,
+        });
+      } catch {
+        // Never let audit-logging failure block authentication.
+      }
+    },
+  },
   providers: [
     Credentials({
       credentials: {

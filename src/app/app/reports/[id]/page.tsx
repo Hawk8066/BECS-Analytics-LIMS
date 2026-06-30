@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canSeeClientIdentity } from "@/lib/samples/blinding";
 import { canAccessSample } from "@/lib/samples/access";
+import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -97,7 +98,7 @@ export default async function ReportPage({
           </div>
           <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
             <span className="text-muted-foreground">Approved</span>
-            <span>{report.approvedAt.toISOString().slice(0, 16).replace("T", " ")} UTC</span>
+            <span>{formatDateTime(report.approvedAt)}</span>
           </div>
           <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
             <span className="text-muted-foreground">Seal (SHA-256)</span>

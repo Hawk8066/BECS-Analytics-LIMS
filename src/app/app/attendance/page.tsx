@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { checkIn, checkOut } from "@/lib/actions/attendance";
+import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -104,7 +105,7 @@ export default async function AttendancePage() {
           <TableBody>
             {recent.map((a) => (
               <TableRow key={a.id}>
-                <TableCell>{a.date.toISOString().slice(0, 10)}</TableCell>
+                <TableCell>{formatDate(a.date)}</TableCell>
                 <TableCell>
                   <Badge variant="outline">{a.status}</Badge>
                 </TableCell>

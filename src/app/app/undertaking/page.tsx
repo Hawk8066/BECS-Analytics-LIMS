@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
+import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/db";
 import { signUndertaking } from "@/lib/actions/undertaking";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export default async function UndertakingPage() {
           </p>
           {undertaking ? (
             <Badge>
-              Signed on {undertaking.signedAt.toISOString().slice(0, 10)}
+              Signed on {formatDate(undertaking.signedAt)}
             </Badge>
           ) : (
             <form action={signUndertaking}>

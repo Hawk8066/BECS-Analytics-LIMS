@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { addQualification, type FormState } from "@/lib/actions/equipment";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 
 export function QualificationForm({ equipmentId }: { equipmentId: string }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -46,7 +46,7 @@ export function QualificationForm({ equipmentId }: { equipmentId: string }) {
       </div>
       <div className="grid gap-1">
         <label className="text-xs text-muted-foreground">Date</label>
-        <Input name="performedOn" type="date" required />
+        <DateInput name="performedOn" required />
       </div>
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "…" : "Add"}

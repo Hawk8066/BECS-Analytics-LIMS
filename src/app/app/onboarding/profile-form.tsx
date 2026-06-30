@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DateInput } from "@/components/ui/date-input";
 
 function Text({ name, label }: { name: string; label: string }) {
   return (
@@ -31,7 +32,7 @@ export function ProfileForm() {
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
           <Label htmlFor="dateOfBirth">Date of birth</Label>
-          <Input id="dateOfBirth" name="dateOfBirth" type="date" />
+          <DateInput id="dateOfBirth" name="dateOfBirth" />
         </div>
         <Text name="cnic" label="CNIC" />
       </div>

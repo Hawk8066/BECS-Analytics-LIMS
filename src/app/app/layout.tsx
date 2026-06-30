@@ -65,6 +65,15 @@ export default async function AppLayout({
             { href: "/app/finance/payroll", label: "Payroll" },
           ],
         },
+        // Application super-admin only (SSOT-exempt): generic data management.
+        ...(user.designation === "ADMIN"
+          ? [
+              {
+                title: "Administration",
+                items: [{ href: "/app/admin", label: "Data (Admin)" }],
+              },
+            ]
+          : []),
       ]
     : [
         {

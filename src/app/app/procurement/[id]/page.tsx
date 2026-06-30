@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
+import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/db";
 import {
   canApprovePR,
@@ -346,7 +347,7 @@ export default async function PRDetailPage({
                   {pr.po.receipts.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="text-muted-foreground">
-                        {r.receivedAt.toISOString().slice(0, 10)}
+                        {formatDate(r.receivedAt)}
                       </TableCell>
                       <TableCell>
                         <Badge

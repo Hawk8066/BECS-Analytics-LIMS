@@ -5,6 +5,7 @@ import { canManageEquipment } from "@/lib/auth/perms";
 import { calStatus } from "@/lib/equipment/calibration";
 import { CalibrationForm } from "./calibration-form";
 import { QualificationForm } from "./qualification-form";
+import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -28,7 +29,7 @@ const CAL_VARIANT = {
 } as const;
 
 function d(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return formatDate(date);
 }
 
 export default async function EquipmentDetailPage({

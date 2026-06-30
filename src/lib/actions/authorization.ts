@@ -12,12 +12,19 @@ export type FormState = { error?: string };
 const CompetenceSchema = z.object({
   subjectId: z.string().min(1),
   functionId: z.string().min(1, "Select a function"),
-  result: z.string().min(1, "Result is required"),
+  competent: z
+    .enum(["true", "false"], { message: "Select Competent or Not Competent" }),
+  education: z.string().optional(),
+  experience: z.string().optional(),
+  training: z.string().optional(),
+  skills: z.string().optional(),
+  remarks: z.string().optional(),
   validUntil: z.string().optional(),
 });
 
-// Record a competence evaluation (subject × function). Precondition for
-// authorization (SSOT §6). The function must already be approved.
+// Record a competence evaluation (subject × function). Captures the assessment
+// basis (education/experience/training/skills) and a Competent/Not-Competent
+// decision; a Competent record is the precondition for authorization (SSOT §6).
 export async function recordCompetence(
   _prev: FormState,
   formData: FormData,
@@ -35,12 +42,20 @@ export async function recordCompetence(
   if (!fn?.approvedAt)
     return { error: "Function must be approved before competence is recorded." };
 
+  const competent = d.competent === "true";
+
   await prisma.competenceEvaluation.create({
     data: {
       subjectId: d.subjectId,
       functionId: d.functionId,
       evaluatorId: actor.id,
-      result: d.result,
+      competent,
+      education: d.education || null,
+      experience: d.experience || null,
+      training: d.training || null,
+      skills: d.skills || null,
+      remarks: d.remarks || null,
+      result: competent ? "Competent" : "Not Competent",
       validUntil: d.validUntil ? new Date(d.validUntil) : null,
     },
   });
@@ -50,7 +65,7 @@ export async function recordCompetence(
     action: "CREATE",
     entityType: "CompetenceEvaluation",
     entityId: d.subjectId,
-    after: { functionId: d.functionId, result: d.result },
+    after: { functionId: d.functionId, competent },
   });
 
   revalidatePath(`/app/personnel/${d.subjectId}`);
@@ -69,11 +84,17 @@ export async function grantAuthorization(formData: FormData): Promise<void> {
   const expiresAt =
     typeof expiresRaw === "string" && expiresRaw ? new Date(expiresRaw) : null;
 
+  // The most recent competence decision for this function must be "Competent".
   const competence = await prisma.competenceEvaluation.findFirst({
     where: { subjectId, functionId },
+    orderBy: { evaluatedAt: "desc" },
   });
   if (!competence)
     throw new Error("Competence is required before authorization.");
+  if (!competence.competent)
+    throw new Error(
+      "Latest competence assessment is Not Competent — cannot authorize.",
+    );
 
   await prisma.authorization.upsert({
     where: { subjectId_functionId: { subjectId, functionId } },

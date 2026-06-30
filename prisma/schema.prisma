@@ -34,6 +34,7 @@ enum SectionType {
 }
 
 enum Designation {
+  ADMIN // application super-admin: full view/edit/delete across all modules + audit
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
@@ -291,7 +292,9 @@ model PersonnelProfile {
   cnic                  String?   @unique
   contactNumber         String?
   bloodGroup            String?
-  emergencyContact      String?
+  emergencyContact      String? // emergency contact number
+  emergencyContactName  String?
+  emergencyContactRelation String?
   education             String?
   experience            String?
   publications          String?
@@ -302,6 +305,66 @@ model PersonnelProfile {
   approvedByCooAt       DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+
+  educationEntries   EducationEntry[]
+  experienceEntries  ExperienceEntry[]
+  trainingEntries    TrainingEntry[]
+  publicationEntries PublicationEntry[]
+}
+
+// Structured education history (multiple per person). Replaces the free-text
+// `education` field above for new data entry.
+model EducationEntry {
+  id          String           @id @default(uuid())
+  profileId   String
+  profile     PersonnelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  degreeLevel String // e.g. "Bachelor's", "Master's", "PhD"
+  subjects    String?
+  startYear   Int?
+  endYear     Int?
+  createdAt   DateTime         @default(now())
+
+  @@index([profileId])
+}
+
+// Structured work experience (multiple per person).
+model ExperienceEntry {
+  id          String           @id @default(uuid())
+  profileId   String
+  profile     PersonnelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company     String
+  designation String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([profileId])
+}
+
+// Structured training history (multiple per person).
+model TrainingEntry {
+  id        String           @id @default(uuid())
+  profileId String
+  profile   PersonnelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title     String
+  year      Int?
+  createdAt DateTime         @default(now())
+
+  @@index([profileId])
+}
+
+// Structured publications list (multiple per person).
+model PublicationEntry {
+  id           String           @id @default(uuid())
+  profileId    String
+  profile      PersonnelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title        String
+  journal      String?
+  year         Int?
+  impactFactor Float?
+  createdAt    DateTime         @default(now())
+
+  @@index([profileId])
 }
 
 model Role {
@@ -348,6 +411,11 @@ model Function {
   code        String   @unique // e.g. "RUN_TM_014", "SIGN_FINAL_REPORT"
   name        String
   description String?
+  // Eligibility criteria for competence/authorization to this function.
+  requiredEducation  String[] // acceptable degree levels (any-of)
+  requiredFields     String[] // acceptable disciplines (any-of)
+  requiredTrainings  String[] // required trainings (free text, multiple)
+  minExperienceYears Float? // minimum years of experience (0.5 increments)
   createdAt   DateTime @default(now())
   approvedAt  DateTime? // COO approval to make the Function available
 
@@ -363,7 +431,15 @@ model CompetenceEvaluation {
   function    Function @relation(fields: [functionId], references: [id])
   evaluatorId String
   evaluator   User     @relation("Evaluator", fields: [evaluatorId], references: [id])
-  result      String // pass/score/notes
+  // Outcome of the assessment. `competent` is the gate decision; the basis
+  // (education/experience/training/skills) and remarks document how it was reached.
+  competent   Boolean  @default(true)
+  education   String?
+  experience  String?
+  training    String?
+  skills      String?
+  remarks     String?
+  result      String? // legacy free-text result/score (kept for older records)
   evaluatedAt DateTime @default(now())
   validUntil  DateTime?
 

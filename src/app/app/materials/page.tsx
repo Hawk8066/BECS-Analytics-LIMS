@@ -7,6 +7,7 @@ import { readScope } from "@/lib/db/scope";
 import { canManageMaterials } from "@/lib/auth/perms";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 import {
   Table,
   TableBody,
@@ -24,7 +25,7 @@ const TABS: { type: MaterialType; label: string }[] = [
 ];
 
 function d(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return formatDate(date);
 }
 
 export default async function MaterialsPage({

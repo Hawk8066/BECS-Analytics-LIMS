@@ -5,6 +5,7 @@ import { registerMaterial, type FormState } from "@/lib/actions/materials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateInput } from "@/components/ui/date-input";
 
 export function MaterialForm({ type }: { type: string }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -33,7 +34,7 @@ export function MaterialForm({ type }: { type: string }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
           <Label htmlFor="expiry">Expiry</Label>
-          <Input id="expiry" name="expiry" type="date" />
+          <DateInput id="expiry" name="expiry" />
         </div>
         {isCRM && (
           <div className="grid gap-2">

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { formatDate } from "@/lib/format";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { procurementListWhere } from "@/lib/procurement/access";
@@ -68,7 +69,7 @@ export default async function ProcurementPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {pr.createdAt.toISOString().slice(0, 10)}
+                  {formatDate(pr.createdAt)}
                 </TableCell>
               </TableRow>
             ))}

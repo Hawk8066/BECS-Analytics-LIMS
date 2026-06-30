@@ -14,7 +14,12 @@ export interface SessionUser {
 }
 
 // Designations that may read across sections/facilities by default.
-const CROSS_SECTION_DESIGNATIONS: Designation[] = ["COO", "OPERATIONS_MANAGER"];
+// ADMIN is the application super-admin and sees every facility/section.
+const CROSS_SECTION_DESIGNATIONS: Designation[] = [
+  "ADMIN",
+  "COO",
+  "OPERATIONS_MANAGER",
+];
 
 export function grantsCrossSectionRead(designation: Designation): boolean {
   return CROSS_SECTION_DESIGNATIONS.includes(designation);

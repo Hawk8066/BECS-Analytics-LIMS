@@ -75,6 +75,24 @@ async function main() {
     });
   }
 
+  // --- Application super-admin (full view/edit/delete; all actions audited) ---
+  const adminPasswordHash = await hash(
+    process.env.ADMIN_PASSWORD ?? "Admin@12345",
+  );
+  await prisma.user.upsert({
+    where: { email: process.env.ADMIN_EMAIL ?? "admin@becs.test" },
+    update: { designation: "ADMIN", status: "ACTIVE" },
+    create: {
+      email: process.env.ADMIN_EMAIL ?? "admin@becs.test",
+      passwordHash: adminPasswordHash,
+      status: "ACTIVE",
+      designation: "ADMIN",
+      facilityId: lahore.id,
+      sectionId: sectionIds.MANAGEMENT!,
+      profile: { create: { fullName: "Application Administrator" } },
+    },
+  });
+
   // --- A few approved functions (SSOT §6) ---
   const functions = [
     { code: "RUN_TM_014", name: "Run Test Method TM-014" },
@@ -408,6 +426,9 @@ async function main() {
 
   console.log("Seeded facilities, sections, users, functions, parameters, methods, clients.");
   console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
+  console.log(
+    `Admin login: ${process.env.ADMIN_EMAIL ?? "admin@becs.test"} / ${process.env.ADMIN_PASSWORD ?? "Admin@12345"} (designation ADMIN)`,
+  );
 }
 
 main()

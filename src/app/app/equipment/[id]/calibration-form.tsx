@@ -5,6 +5,7 @@ import { addCalibration, type FormState } from "@/lib/actions/equipment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateInput } from "@/components/ui/date-input";
 
 export function CalibrationForm({ equipmentId }: { equipmentId: string }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -19,11 +20,11 @@ export function CalibrationForm({ equipmentId }: { equipmentId: string }) {
       <input type="hidden" name="equipmentId" value={equipmentId} />
       <div className="grid gap-1.5">
         <Label className="text-xs">Calibrated on</Label>
-        <Input name="calibratedOn" type="date" required />
+        <DateInput name="calibratedOn" required />
       </div>
       <div className="grid gap-1.5">
         <Label className="text-xs">Valid until</Label>
-        <Input name="validUntil" type="date" required />
+        <DateInput name="validUntil" required />
       </div>
       <div className="grid gap-1.5">
         <Label className="text-xs">Calibrated by</Label>

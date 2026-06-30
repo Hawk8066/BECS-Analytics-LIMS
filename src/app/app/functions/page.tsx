@@ -45,6 +45,7 @@ export default async function FunctionsPage() {
             <TableRow>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>Requirements</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
@@ -54,6 +55,29 @@ export default async function FunctionsPage() {
               <TableRow key={fn.id}>
                 <TableCell className="font-mono text-xs">{fn.code}</TableCell>
                 <TableCell>{fn.name}</TableCell>
+                <TableCell className="max-w-[280px] text-xs text-muted-foreground">
+                  {fn.requiredEducation.length === 0 &&
+                  fn.requiredFields.length === 0 &&
+                  fn.requiredTrainings.length === 0 &&
+                  fn.minExperienceYears == null ? (
+                    "—"
+                  ) : (
+                    <div className="space-y-0.5">
+                      {fn.requiredEducation.length > 0 && (
+                        <div>Edu: {fn.requiredEducation.join(", ")}</div>
+                      )}
+                      {fn.requiredFields.length > 0 && (
+                        <div>Subject: {fn.requiredFields.join(", ")}</div>
+                      )}
+                      {fn.requiredTrainings.length > 0 && (
+                        <div>Training: {fn.requiredTrainings.join(", ")}</div>
+                      )}
+                      {fn.minExperienceYears != null && (
+                        <div>Exp: ≥ {fn.minExperienceYears} yrs</div>
+                      )}
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>
                   {fn.approvedAt ? (
                     <Badge>Approved</Badge>
@@ -75,7 +99,7 @@ export default async function FunctionsPage() {
             ))}
             {functions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No functions defined yet.
                 </TableCell>
               </TableRow>

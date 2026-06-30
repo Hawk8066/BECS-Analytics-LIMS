@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/format";
 
 type LogRow = {
   id: string;
@@ -29,7 +30,7 @@ const ACTION_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
 };
 
 function ts(d: Date): string {
-  return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  return formatDateTime(d);
 }
 
 export function AuditLogTable({ logs }: { logs: LogRow[] }) {

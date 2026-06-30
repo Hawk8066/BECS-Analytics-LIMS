@@ -5,6 +5,7 @@ import { createPersonnelShell, type FormState } from "@/lib/actions/personnel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateInput } from "@/components/ui/date-input";
 
 type Option = { id: string; name: string };
 
@@ -98,7 +99,7 @@ export function PersonnelShellForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
           <Label htmlFor="dateOfJoining">Date of joining</Label>
-          <Input id="dateOfJoining" name="dateOfJoining" type="date" />
+          <DateInput id="dateOfJoining" name="dateOfJoining" />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="tempPassword">Temporary password</Label>

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { formatDate } from "@/lib/format";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canManageMaterials } from "@/lib/auth/perms";
@@ -81,7 +82,7 @@ export default async function MaterialDetailPage({
           )}
           <Field
             label="Expiry"
-            value={item.expiry ? item.expiry.toISOString().slice(0, 10) : null}
+            value={item.expiry ? formatDate(item.expiry) : null}
           />
           <Field label="Unit" value={item.unit} />
         </CardContent>
@@ -124,7 +125,7 @@ export default async function MaterialDetailPage({
                     </a>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {a.createdAt.toISOString().slice(0, 10)}
+                    {formatDate(a.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}
