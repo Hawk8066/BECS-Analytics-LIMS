@@ -13,6 +13,7 @@ export type FormState = { error?: string };
 
 const SampleSchema = z.object({
   clientId: z.string().min(1, "Select a client"),
+  facilityId: z.string().min(1, "Select a lab"),
   sampleType: z.string().min(1, "Sample type is required"),
   clientSampleRef: z.string().optional(),
   priority: z.string().optional(),
@@ -42,10 +43,16 @@ export async function registerSample(
   if (parameterIds.length === 0)
     return { error: "Select at least one parameter." };
 
+  // Chosen lab (facility) + its lab section.
   const facility = await prisma.facility.findUnique({
-    where: { id: actor.facilityId },
+    where: { id: d.facilityId },
   });
-  if (!facility) return { error: "Facility not found." };
+  if (!facility) return { error: "Selected lab not found." };
+  const labSection = await prisma.section.findFirst({
+    where: { facilityId: facility.id, type: { in: ["LAHORE_LAB", "RYK_LAB"] } },
+  });
+  if (!labSection)
+    return { error: "No lab section configured for the selected lab." };
 
   const year = new Date().getFullYear();
   const labId = await nextNumber({
@@ -64,8 +71,8 @@ export async function registerSample(
       priority: d.priority || null,
       instructions: d.instructions || null,
       thirdPartyName: d.thirdPartyName || null,
-      facilityId: actor.facilityId,
-      sectionId: actor.sectionId,
+      facilityId: facility.id,
+      sectionId: labSection.id,
       registeredById: actor.id,
       parameters: { create: parameterIds.map((parameterId) => ({ parameterId })) },
     },
@@ -77,8 +84,8 @@ export async function registerSample(
     entityType: "Sample",
     entityId: sample.id,
     after: { labId, parameters: parameterIds.length },
-    facilityId: actor.facilityId,
-    sectionId: actor.sectionId,
+    facilityId: facility.id,
+    sectionId: labSection.id,
   });
 
   revalidatePath("/app/samples");

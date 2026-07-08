@@ -13,6 +13,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     status: u.status,
     facilityId: u.facilityId,
     sectionId: u.sectionId,
+    clientId: u.clientId ?? null,
     roleKeys: u.roleKeys ?? [],
     canReadCrossSection: u.canReadCrossSection ?? false,
   };

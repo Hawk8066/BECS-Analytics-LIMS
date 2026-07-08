@@ -5,7 +5,7 @@ import {
   canApproveProfile,
   canEvaluateCompetence,
   canGrantAuthorization,
-  canManagePersonnel,
+  isAdmin,
 } from "@/lib/auth/perms";
 import { approveProfile } from "@/lib/actions/personnel";
 import { ProfileSection } from "./profile-section";
@@ -15,7 +15,6 @@ import { TrainingSection } from "./training-section";
 import { PublicationSection } from "./publication-section";
 import { uploadProfilePicture } from "@/lib/actions/personnel";
 import { FileUploadButton } from "@/components/ui/file-upload-button";
-import { DateInput } from "@/components/ui/date-input";
 import { designationLabel } from "@/lib/labels";
 import { formatDate } from "@/lib/format";
 import {
@@ -90,16 +89,26 @@ export default async function PersonnelDetailPage({
   const canEvaluate = canEvaluateCompetence(user.designation);
   const canGrant = canGrantAuthorization(user.designation);
 
-  // Functions this person has competence for (candidates for authorization).
-  const competentFunctions = Array.from(
-    new Map(competences.map((c) => [c.function.id, c.function])).values(),
-  );
   const jobDescription = authorizations.filter(isAuthActive);
+
+  // Auto-derive authorization candidates from competence: the LATEST competence
+  // decision per function must be "Competent" and not already actively authorized.
+  const latestCompetenceByFn = new Map<string, (typeof competences)[number]>();
+  for (const c of competences) {
+    // competences are ordered evaluatedAt desc, so first seen = latest.
+    if (!latestCompetenceByFn.has(c.functionId)) latestCompetenceByFn.set(c.functionId, c);
+  }
+  const activeAuthFnIds = new Set(
+    authorizations.filter(isAuthActive).map((a) => a.functionId),
+  );
+  const eligibleForAuth = [...latestCompetenceByFn.values()].filter(
+    (c) => c.competent && !activeAuthFnIds.has(c.functionId),
+  );
 
   const ymd = (d: Date | null | undefined) =>
     d ? d.toISOString().slice(0, 10) : "";
-  const canEditProfile =
-    canManagePersonnel(user.designation) || user.id === person.id;
+  // Only the profile owner edits their own profile (ADMIN is the super-admin override).
+  const canEditProfile = user.id === person.id || isAdmin(user.designation);
 
   // Profile picture + per-education-entry document attachments.
   const eduIds = (p?.educationEntries ?? []).map((e) => e.id);
@@ -320,20 +329,26 @@ export default async function PersonnelDetailPage({
             <TableRow>
               <TableHead>Function</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Expires</TableHead>
+              <TableHead>Valid till</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {authorizations.map((a) => (
               <TableRow key={a.id}>
-                <TableCell className="font-mono text-xs">
-                  {a.function.code}
+                <TableCell>
+                  <div className="font-mono text-xs">{a.function.code}</div>
+                  <div className="text-sm">{a.function.name}</div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={isAuthActive(a) ? "default" : "outline"}>
-                    {isAuthActive(a) ? "ACTIVE" : a.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={isAuthActive(a) ? "default" : "outline"}>
+                      {isAuthActive(a) ? "ACTIVE" : a.status}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {a.scope === "PARTIAL" ? "Partial" : "Full"}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {a.expiresAt ? formatDate(a.expiresAt) : "—"}
@@ -361,44 +376,67 @@ export default async function PersonnelDetailPage({
           </TableBody>
         </Table>
 
-        {canGrant && competentFunctions.length > 0 && (
-          <form
-            action={grantAuthorization}
-            className="flex flex-wrap items-end gap-3 border-t pt-4"
-          >
-            <input type="hidden" name="subjectId" value={person.id} />
-            <div className="grid gap-1.5">
-              <label htmlFor="functionId" className="text-xs text-muted-foreground">
-                Grant authorization (competent functions)
-              </label>
-              <select
-                id="functionId"
-                name="functionId"
-                required
-                defaultValue=""
-                className="h-9 rounded-md border bg-transparent px-2 text-sm"
-              >
-                <option value="" disabled>
-                  Select…
-                </option>
-                {competentFunctions.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.code}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-1.5">
-              <label htmlFor="expiresAt" className="text-xs text-muted-foreground">
-                Expires (optional)
-              </label>
-              <DateInput id="expiresAt" name="expiresAt" />
-            </div>
-            <Button size="sm" type="submit">
-              Grant (COO)
-            </Button>
-          </form>
-        )}
+        {/* Auto-fetched from competence: functions the person is currently
+            Competent in and not yet authorized. The COO grants each. */}
+        <div className="border-t pt-4">
+          <p className="mb-2 text-sm font-medium">
+            Eligible for authorization{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              — auto-fetched from Competent assessments
+            </span>
+          </p>
+          {eligibleForAuth.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No competent functions pending authorization.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {eligibleForAuth.map((c) => (
+                <li
+                  key={c.function.id}
+                  className="flex flex-wrap items-end justify-between gap-3 rounded-md border p-3"
+                >
+                  <div>
+                    <div className="font-mono text-xs">{c.function.code}</div>
+                    <div className="text-sm">{c.function.name}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Badge>Competent</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Valid till: {c.validUntil ? formatDate(c.validUntil) : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  {canGrant ? (
+                    <form action={grantAuthorization} className="flex items-end gap-3">
+                      <input type="hidden" name="subjectId" value={person.id} />
+                      <input type="hidden" name="functionId" value={c.function.id} />
+                      {/* Valid-till auto-fetched from the competence assessment. */}
+                      <input type="hidden" name="expiresAt" value={ymd(c.validUntil)} />
+                      <div className="grid gap-1.5">
+                        <label className="text-xs text-muted-foreground">Authorization</label>
+                        <select
+                          name="scope"
+                          defaultValue="FULL"
+                          className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                        >
+                          <option value="FULL">Fully</option>
+                          <option value="PARTIAL">Partially</option>
+                        </select>
+                      </div>
+                      <Button size="sm" type="submit">
+                        Authorize
+                      </Button>
+                    </form>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Awaiting COO authorization
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

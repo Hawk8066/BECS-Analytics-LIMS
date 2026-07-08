@@ -9,11 +9,22 @@ export const authConfig = {
   pages: { signIn: "/login" },
   providers: [],
   callbacks: {
-    // Route protection for middleware: /app/** requires a session.
+    // Route protection: staff use /app, external clients use /portal.
     authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isOnApp = nextUrl.pathname.startsWith("/app");
-      if (isOnApp) return isLoggedIn;
+      const user = auth?.user as { designation?: Designation } | undefined;
+      const path = nextUrl.pathname;
+      const isClient = user?.designation === "CLIENT";
+
+      if (path.startsWith("/app")) {
+        if (!user) return false; // -> login
+        if (isClient) return Response.redirect(new URL("/portal", nextUrl));
+        return true;
+      }
+      if (path.startsWith("/portal")) {
+        if (!user) return false; // -> login
+        if (!isClient) return Response.redirect(new URL("/app", nextUrl));
+        return true;
+      }
       return true;
     },
     jwt({ token, user }) {
@@ -24,12 +35,14 @@ export const authConfig = {
           status: UserStatus;
           facilityId: string;
           sectionId: string;
+          clientId: string | null;
         };
         token.uid = u.id;
         token.designation = u.designation;
         token.status = u.status;
         token.facilityId = u.facilityId;
         token.sectionId = u.sectionId;
+        token.clientId = u.clientId ?? null;
       }
       return token;
     },
@@ -42,6 +55,7 @@ export const authConfig = {
           status: token.status,
           facilityId: token.facilityId,
           sectionId: token.sectionId,
+          clientId: token.clientId ?? null,
           roleKeys: [],
           canReadCrossSection: designation
             ? grantsCrossSectionRead(designation)

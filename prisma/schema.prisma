@@ -35,6 +35,7 @@ enum SectionType {
 
 enum Designation {
   ADMIN // application super-admin: full view/edit/delete across all modules + audit
+  CLIENT // external client portal login (see own details/samples/reports only)
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
@@ -256,6 +257,10 @@ model User {
   manager   User?   @relation("UserManager", fields: [managerId], references: [id])
   reports   User[]  @relation("UserManager")
 
+  // External client portal login: links this account to a Client (CLIENT designation).
+  clientId String?
+  client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
+
   profile        PersonnelProfile?
   roles          UserRole[]
   competences    CompetenceEvaluation[] @relation("Subject")
@@ -269,7 +274,7 @@ model User {
   attendances       Attendance[]
   leaveApplications LeaveApplication[] @relation("LeaveApplicant")
   leaveDecisions    LeaveApplication[] @relation("LeaveApprover")
-  undertaking       ImpartialityUndertaking?
+  undertakings      ImpartialityUndertaking[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,6 +282,7 @@ model User {
   @@index([facilityId])
   @@index([sectionId])
   @@index([managerId])
+  @@index([clientId])
 }
 
 // Full HR profile (Module 01). OM enters the shell fields on User; the user
@@ -456,6 +462,7 @@ model Authorization {
   grantedById  String // COO
   grantedBy    User                @relation("AuthGrantedBy", fields: [grantedById], references: [id])
   status       AuthorizationStatus @default(ACTIVE)
+  scope        String              @default("FULL") // FULL | PARTIAL (fully/partially authorized)
   effectiveAt  DateTime            @default(now())
   expiresAt    DateTime?
   createdAt    DateTime            @default(now())
@@ -621,13 +628,18 @@ model LeaveApplication {
   @@index([status])
 }
 
-// Impartiality & Confidentiality undertaking — e-signed once per user.
+// Impartiality & Confidentiality undertaking — e-signed on first login and then
+// re-signed every calendar year (one record per user per year; BR-20 / ISO 17025).
 model ImpartialityUndertaking {
   id       String   @id @default(uuid())
-  userId   String   @unique
+  userId   String
   user     User     @relation(fields: [userId], references: [id])
-  version  String   @default("v1")
+  year     Int
+  version  String   @default("2025")
   signedAt DateTime @default(now())
+
+  @@unique([userId, year])
+  @@index([userId])
 }
 
 // ----------------------------------------------------------------------------
@@ -638,17 +650,26 @@ model Client {
   id            String   @id @default(uuid())
   clientNo      String   @unique
   company       String
-  address       String?
+  address       String? // legacy single-line address (superseded by the fields below)
+  addressLine1  String?
+  addressLine2  String?
+  addressLine3  String?
+  city          String?
+  province      String?
+  country       String?
   contactPerson String?
   contactNumber String?
   email         String?
   sector        String?
+  ntn           String? // National Tax Number
+  stn           String? // Sales Tax Number
   facilityId    String // owning facility (RYK client = Bio Tech Fertilizers)
   createdById   String?
   createdAt     DateTime @default(now())
 
   samples  Sample[]
   invoices Invoice[]
+  portalUsers User[] @relation("ClientPortalUser")
 
   @@index([facilityId])
 }
@@ -656,12 +677,18 @@ model Client {
 // Master parameter (Module 04 owns these; Samples reads them). `accredited`
 // drives the List of Accredited Parameters. Price in PKR paisa (SSOT §15).
 model Parameter {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  unit       String?
-  accredited Boolean  @default(false)
-  price      Int? // PKR paisa
-  createdAt  DateTime @default(now())
+  id          String    @id @default(uuid())
+  name        String    @unique
+  unit        String?
+  matrix      String? // sample matrix (e.g. Soil, Water, Fertilizer)
+  method      String? // test method / reference
+  lod         String? // Limit of Detection
+  loq         String? // Limit of Quantification
+  accredited  Boolean   @default(false)
+  price       Int? // PKR paisa
+  createdById String? // proposer (OM / LO / Lab Manager)
+  approvedAt  DateTime? // COO approval to make the parameter available
+  createdAt   DateTime  @default(now())
 
   sampleParameters SampleParameter[]
 }

@@ -112,3 +112,14 @@ export const canApprovePayroll = (d: Designation) => isAdmin(d) || d === "COO";
 
 /** Access to the generic Admin panel (view/edit/delete any record). ADMIN only. */
 export const canAdminister = (d: Designation) => isAdmin(d);
+
+/** Propose/manage test parameters: OM, LO, RYK Lab Manager (COO too). */
+export const canManageParameters = (d: Designation) =>
+  isAdmin(d) ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "LIAISON_OFFICER" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "COO";
+
+/** Only the COO approves parameters (makes them available for samples). */
+export const canApproveParameter = (d: Designation) => isAdmin(d) || d === "COO";

@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
+import { isUndertakingDue, undertakingYear } from "@/lib/undertaking/status";
 import { NavLink } from "@/components/nav-link";
 import { BecsLogo } from "@/components/becs-logo";
+import { UndertakingGate } from "@/components/undertaking-gate";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "./actions";
 
@@ -12,9 +14,13 @@ export default async function AppLayout({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  // External client accounts belong in the portal, not the staff app.
+  if (user.designation === "CLIENT") redirect("/portal");
 
   const active = user.status === "ACTIVE";
-  const groups = active
+  // Force the yearly undertaking before any app usage (first login + each 1 Jan).
+  const undertakingDue = active ? await isUndertakingDue(user.id) : false;
+  const groups = active && !undertakingDue
     ? [
         {
           title: "Overview",
@@ -75,12 +81,14 @@ export default async function AppLayout({
             ]
           : []),
       ]
-    : [
-        {
-          title: "",
-          items: [{ href: "/app/onboarding", label: "Complete profile" }],
-        },
-      ];
+    : active
+      ? [] // undertaking due — hide nav until signed
+      : [
+          {
+            title: "",
+            items: [{ href: "/app/onboarding", label: "Complete profile" }],
+          },
+        ];
 
   return (
     <div className="grid min-h-svh grid-cols-[220px_1fr]">
@@ -122,7 +130,9 @@ export default async function AppLayout({
             </Button>
           </form>
         </header>
-        <main className="min-w-0 flex-1 p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-6">
+          {undertakingDue ? <UndertakingGate year={undertakingYear()} /> : children}
+        </main>
       </div>
     </div>
   );

@@ -1,16 +1,20 @@
-// App-wide date formatting. Display format is DD/MM/YYYY everywhere; values are
-// stored/transported as ISO (yyyy-mm-dd / full ISO) and only formatted for view.
+// App-wide date/time formatting. Display format is DD/MM/YYYY everywhere and
+// times are shown in Pakistan Standard Time (PKT, UTC+5, no DST). Values are
+// stored/transported as UTC ISO and only converted for view.
+
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000; // Asia/Karachi = UTC+5 (fixed)
 
 function parts(value: Date | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  // Use UTC so a date-only value (stored at midnight UTC) isn't shifted a day.
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = d.getUTCFullYear();
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const min = String(d.getUTCMinutes()).padStart(2, "0");
+  // Shift to PKT, then read UTC fields (date-only values at 00:00Z stay same day).
+  const k = new Date(d.getTime() + PKT_OFFSET_MS);
+  const dd = String(k.getUTCDate()).padStart(2, "0");
+  const mm = String(k.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = k.getUTCFullYear();
+  const hh = String(k.getUTCHours()).padStart(2, "0");
+  const min = String(k.getUTCMinutes()).padStart(2, "0");
   return { dd, mm, yyyy, hh, min };
 }
 
@@ -20,10 +24,24 @@ export function formatDate(value: Date | string | null | undefined): string {
   return p ? `${p.dd}/${p.mm}/${p.yyyy}` : "";
 }
 
-/** DD/MM/YYYY HH:mm UTC. */
+// 12-hour clock with AM/PM (times are already shifted to Pakistan time).
+function clock12(hh: string, min: string): string {
+  const h = Number(hh);
+  const mer = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${min} ${mer}`;
+}
+
+/** DD/MM/YYYY h:mm AM/PM. */
 export function formatDateTime(value: Date | string | null | undefined): string {
   const p = parts(value);
-  return p ? `${p.dd}/${p.mm}/${p.yyyy} ${p.hh}:${p.min} UTC` : "";
+  return p ? `${p.dd}/${p.mm}/${p.yyyy} ${clock12(p.hh, p.min)}` : "";
+}
+
+/** h:mm AM/PM (time only). */
+export function formatTime(value: Date | string | null | undefined): string {
+  const p = parts(value);
+  return p ? clock12(p.hh, p.min) : "";
 }
 
 /** ISO yyyy-mm-dd (for date input values), empty string for null/invalid. */

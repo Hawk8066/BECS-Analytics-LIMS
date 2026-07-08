@@ -10,13 +10,23 @@ export default async function NewSamplePage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canRegisterSample(user.designation)) redirect("/app/samples");
 
-  const [clients, parameters] = await Promise.all([
+  const [clients, parameters, facilities] = await Promise.all([
     prisma.client.findMany({
       where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
       orderBy: { company: "asc" },
     }),
-    prisma.parameter.findMany({ orderBy: { name: "asc" } }),
+    prisma.parameter.findMany({
+      where: { approvedAt: { not: null } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.facility.findMany({ orderBy: { code: "asc" } }),
   ]);
+
+  const LAB_NAMES: Record<string, string> = {
+    LAHORE: "Lahore",
+    RYK: "Rahimyar Khan",
+  };
+  const labs = facilities.map((f) => ({ id: f.id, name: LAB_NAMES[f.code] ?? f.name }));
 
   return (
     <div className="space-y-6">
@@ -27,9 +37,11 @@ export default async function NewSamplePage() {
         </p>
       </div>
       <SampleForm
+        labs={labs}
+        defaultLabId={user.facilityId}
         clients={clients.map((c) => ({
           id: c.id,
-          label: `${c.company} (${c.clientNo})`,
+          label: c.company,
         }))}
         parameters={parameters.map((p) => ({
           id: p.id,

@@ -8,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export function SampleForm({
+  labs,
+  defaultLabId,
   clients,
   parameters,
 }: {
+  labs: { id: string; name: string }[];
+  defaultLabId?: string;
   clients: { id: string; label: string }[];
   parameters: { id: string; name: string; unit: string | null; accredited: boolean }[];
 }) {
@@ -21,6 +25,25 @@ export function SampleForm({
 
   return (
     <form action={formAction} className="grid max-w-xl gap-4">
+      <div className="grid gap-2">
+        <Label htmlFor="facilityId">Lab</Label>
+        <select
+          id="facilityId"
+          name="facilityId"
+          required
+          defaultValue={defaultLabId ?? ""}
+          className="h-9 rounded-md border bg-transparent px-3 text-sm"
+        >
+          <option value="" disabled>
+            Select…
+          </option>
+          {labs.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="grid gap-2">
         <Label htmlFor="clientId">Client</Label>
         <select

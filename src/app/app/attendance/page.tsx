@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { checkIn, checkOut } from "@/lib/actions/attendance";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,7 +27,7 @@ function startOfToday(): Date {
 }
 
 function hm(d?: Date | null): string {
-  return d ? d.toISOString().slice(11, 16) + " UTC" : "—";
+  return d ? formatTime(d) : "—";
 }
 
 export default async function AttendancePage() {

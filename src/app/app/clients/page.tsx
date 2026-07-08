@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canRegisterClient } from "@/lib/auth/perms";
+import { formatDate } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
@@ -37,14 +38,19 @@ export default async function ClientsPage() {
         )}
       </div>
 
-      <div className="rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Client No</TableHead>
               <TableHead>Company</TableHead>
               <TableHead>Sector</TableHead>
-              <TableHead>Contact</TableHead>
+              <TableHead>Contact person</TableHead>
+              <TableHead>Contact number</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>NTN</TableHead>
+              <TableHead>STN</TableHead>
+              <TableHead>Registered</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -52,17 +58,20 @@ export default async function ClientsPage() {
               <TableRow key={c.id}>
                 <TableCell className="font-mono text-xs">{c.clientNo}</TableCell>
                 <TableCell className="font-medium">{c.company}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {c.sector ?? "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {c.contactPerson ?? c.email ?? c.contactNumber ?? "—"}
+                <TableCell className="text-muted-foreground">{c.sector ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.contactPerson ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.contactNumber ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.ntn ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.stn ?? "—"}</TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {formatDate(c.createdAt)}
                 </TableCell>
               </TableRow>
             ))}
             {clients.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={9} className="text-center text-muted-foreground">
                   No clients yet.
                 </TableCell>
               </TableRow>

@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
-import { canApproveProfile, canManagePersonnel } from "@/lib/auth/perms";
+import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { saveFile } from "@/lib/storage/local";
 
@@ -171,8 +171,8 @@ export async function updatePersonnelProfile(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const d = parsed.data;
 
-  if (!canManagePersonnel(actor.designation) && actor.id !== d.userId)
-    return { error: "Not permitted to edit this profile." };
+  if (actor.id !== d.userId && !isAdmin(actor.designation))
+    return { error: "Only the profile owner can edit this profile." };
 
   const target = await prisma.user.findUnique({ where: { id: d.userId } });
   if (!target) return { error: "User not found." };
@@ -215,8 +215,8 @@ export async function updatePersonnelProfile(
 // Resolve the editable profile for a user, enforcing the edit permission.
 async function authorizeProfileEdit(userId: string) {
   const actor = await requireUser();
-  if (!canManagePersonnel(actor.designation) && actor.id !== userId)
-    return { error: "Not permitted to edit this profile." as string };
+  if (actor.id !== userId && !isAdmin(actor.designation))
+    return { error: "Only the profile owner can edit this profile." as string };
   const profile = await prisma.personnelProfile.findUnique({
     where: { userId },
     include: { user: true },
@@ -551,8 +551,8 @@ export async function uploadEducationFile(
   if (!entry) return { error: "Education entry not found." };
 
   const actor = await requireUser();
-  if (!canManagePersonnel(actor.designation) && actor.id !== entry.profile.userId)
-    return { error: "Not permitted to edit this profile." };
+  if (actor.id !== entry.profile.userId && !isAdmin(actor.designation))
+    return { error: "Only the profile owner can edit this profile." };
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0)

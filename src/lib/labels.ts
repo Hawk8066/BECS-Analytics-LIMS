@@ -3,6 +3,7 @@ import type { Designation } from "@prisma/client";
 // Human-readable labels for the Designation enum (UI display).
 export const DESIGNATION_LABELS: Record<Designation, string> = {
   ADMIN: "Administrator",
+  CLIENT: "Client",
   COO: "COO",
   OPERATIONS_MANAGER: "Operations Manager",
   LAB_MANAGER_RYK: "Lab Manager (RYK)",

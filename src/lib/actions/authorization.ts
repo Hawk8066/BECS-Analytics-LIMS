@@ -83,6 +83,7 @@ export async function grantAuthorization(formData: FormData): Promise<void> {
   const expiresRaw = formData.get("expiresAt");
   const expiresAt =
     typeof expiresRaw === "string" && expiresRaw ? new Date(expiresRaw) : null;
+  const scope = String(formData.get("scope")) === "PARTIAL" ? "PARTIAL" : "FULL";
 
   // The most recent competence decision for this function must be "Competent".
   const competence = await prisma.competenceEvaluation.findFirst({
@@ -100,11 +101,12 @@ export async function grantAuthorization(formData: FormData): Promise<void> {
     where: { subjectId_functionId: { subjectId, functionId } },
     update: {
       status: "ACTIVE",
+      scope,
       grantedById: actor.id,
       effectiveAt: new Date(),
       expiresAt,
     },
-    create: { subjectId, functionId, grantedById: actor.id, expiresAt },
+    create: { subjectId, functionId, scope, grantedById: actor.id, expiresAt },
   });
 
   await writeAudit({
@@ -112,7 +114,7 @@ export async function grantAuthorization(formData: FormData): Promise<void> {
     action: "APPROVE",
     entityType: "Authorization",
     entityId: subjectId,
-    after: { functionId, status: "ACTIVE" },
+    after: { functionId, status: "ACTIVE", scope },
   });
 
   revalidatePath(`/app/personnel/${subjectId}`);
