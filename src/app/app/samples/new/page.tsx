@@ -10,16 +10,21 @@ export default async function NewSamplePage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canRegisterSample(user.designation)) redirect("/app/samples");
 
-  const [clients, parameters, facilities] = await Promise.all([
+  const [clients, parameters, facilities, packages] = await Promise.all([
     prisma.client.findMany({
       where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
       orderBy: { company: "asc" },
     }),
     prisma.parameter.findMany({
       where: { approvedAt: { not: null } },
+      include: { sectorPrices: true },
       orderBy: { name: "asc" },
     }),
     prisma.facility.findMany({ orderBy: { code: "asc" } }),
+    prisma.package.findMany({
+      orderBy: { name: "asc" },
+      include: { parameters: { select: { parameterId: true } }, prices: true },
+    }),
   ]);
 
   const LAB_NAMES: Record<string, string> = {
@@ -48,6 +53,13 @@ export default async function NewSamplePage() {
           name: p.name,
           unit: p.unit,
           accredited: p.accredited,
+          prices: Object.fromEntries(p.sectorPrices.map((sp) => [sp.sector, sp.price])),
+        }))}
+        packages={packages.map((pkg) => ({
+          id: pkg.id,
+          name: pkg.name,
+          parameterIds: pkg.parameters.map((x) => x.parameterId),
+          prices: Object.fromEntries(pkg.prices.map((x) => [x.sector, x.price])),
         }))}
       />
     </div>

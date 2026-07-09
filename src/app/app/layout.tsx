@@ -14,8 +14,9 @@ export default async function AppLayout({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  // External client accounts belong in the portal, not the staff app.
+  // External accounts belong in their own portals, not the staff app.
   if (user.designation === "CLIENT") redirect("/portal");
+  if (user.designation === "VENDOR") redirect("/vendor");
 
   const active = user.status === "ACTIVE";
   // Force the yearly undertaking before any app usage (first login + each 1 Jan).

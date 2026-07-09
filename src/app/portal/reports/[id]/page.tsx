@@ -83,7 +83,7 @@ export default async function PortalReportPage({
                   <TableCell>{sp.parameter.name}</TableCell>
                   <TableCell className="font-medium">{sp.resultValue ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {sp.parameter.unit ?? "—"}
+                    {sp.unit ?? sp.parameter.unit ?? "—"}
                   </TableCell>
                 </TableRow>
               ))}

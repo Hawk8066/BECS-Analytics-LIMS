@@ -4,6 +4,7 @@ import { verify } from "argon2";
 import { prisma } from "@/lib/db";
 import { authConfig } from "@/auth.config";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { entranceOf } from "@/lib/auth/entrance";
 
 // Full (Node-runtime) Auth.js instance. Credentials provider verifies the
 // Argon2id hash and only lets ACTIVE users in (account is created on COO
@@ -33,14 +34,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        as: { label: "Entrance", type: "text" },
       },
       authorize: async (creds) => {
         const email = typeof creds?.email === "string" ? creds.email : null;
         const password =
           typeof creds?.password === "string" ? creds.password : null;
+        const as = typeof creds?.as === "string" ? creds.as : null;
         if (!email || !password) return null;
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({
+          where: { email },
+          include: { section: true },
+        });
         // Resigned accounts are blocked; PENDING_* users may sign in but are
         // gated to onboarding by the app layout until COO approval (SSOT §5).
         if (!user || !user.passwordHash || user.status === "NON_ACTIVE")
@@ -48,6 +54,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const ok = await verify(user.passwordHash, password);
         if (!ok) return null;
+
+        // Enforce the chosen sign-in entrance (landing-page button), if given.
+        if (as && entranceOf(user.designation, user.section?.type) !== as)
+          return null;
 
         return {
           id: user.id,
@@ -57,6 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           facilityId: user.facilityId,
           sectionId: user.sectionId,
           clientId: user.clientId,
+          vendorId: user.vendorId,
         };
       },
     }),

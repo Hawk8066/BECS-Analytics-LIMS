@@ -40,8 +40,20 @@ export async function registerSample(
     .getAll("parameterIds")
     .map(String)
     .filter(Boolean);
-  if (parameterIds.length === 0)
-    return { error: "Select at least one parameter." };
+  const packageIds = formData.getAll("packageIds").map(String).filter(Boolean);
+
+  // Expand selected packages into their parameters and union with direct picks.
+  const paramSet = new Set(parameterIds);
+  if (packageIds.length > 0) {
+    const links = await prisma.packageParameter.findMany({
+      where: { packageId: { in: packageIds } },
+      select: { parameterId: true },
+    });
+    for (const l of links) paramSet.add(l.parameterId);
+  }
+  const finalParameterIds = [...paramSet];
+  if (finalParameterIds.length === 0)
+    return { error: "Select at least one parameter or package." };
 
   // Chosen lab (facility) + its lab section.
   const facility = await prisma.facility.findUnique({
@@ -74,7 +86,12 @@ export async function registerSample(
       facilityId: facility.id,
       sectionId: labSection.id,
       registeredById: actor.id,
-      parameters: { create: parameterIds.map((parameterId) => ({ parameterId })) },
+      parameters: {
+        create: finalParameterIds.map((parameterId) => {
+          const u = String(formData.get(`unit_${parameterId}`) ?? "").trim();
+          return { parameterId, unit: u || null };
+        }),
+      },
     },
   });
 
@@ -83,7 +100,7 @@ export async function registerSample(
     action: "CREATE",
     entityType: "Sample",
     entityId: sample.id,
-    after: { labId, parameters: parameterIds.length },
+    after: { labId, parameters: finalParameterIds.length },
     facilityId: facility.id,
     sectionId: labSection.id,
   });

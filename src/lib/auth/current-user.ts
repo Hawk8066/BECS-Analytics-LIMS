@@ -14,6 +14,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     facilityId: u.facilityId,
     sectionId: u.sectionId,
     clientId: u.clientId ?? null,
+    vendorId: u.vendorId ?? null,
     roleKeys: u.roleKeys ?? [],
     canReadCrossSection: u.canReadCrossSection ?? false,
   };

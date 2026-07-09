@@ -13,16 +13,23 @@ export const authConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const user = auth?.user as { designation?: Designation } | undefined;
       const path = nextUrl.pathname;
-      const isClient = user?.designation === "CLIENT";
+      const d = user?.designation;
+      const home =
+        d === "CLIENT" ? "/portal" : d === "VENDOR" ? "/vendor" : "/app";
 
       if (path.startsWith("/app")) {
         if (!user) return false; // -> login
-        if (isClient) return Response.redirect(new URL("/portal", nextUrl));
+        if (home !== "/app") return Response.redirect(new URL(home, nextUrl));
         return true;
       }
       if (path.startsWith("/portal")) {
-        if (!user) return false; // -> login
-        if (!isClient) return Response.redirect(new URL("/app", nextUrl));
+        if (!user) return false;
+        if (home !== "/portal") return Response.redirect(new URL(home, nextUrl));
+        return true;
+      }
+      if (path.startsWith("/vendor")) {
+        if (!user) return false;
+        if (home !== "/vendor") return Response.redirect(new URL(home, nextUrl));
         return true;
       }
       return true;
@@ -36,6 +43,7 @@ export const authConfig = {
           facilityId: string;
           sectionId: string;
           clientId: string | null;
+          vendorId: string | null;
         };
         token.uid = u.id;
         token.designation = u.designation;
@@ -43,6 +51,7 @@ export const authConfig = {
         token.facilityId = u.facilityId;
         token.sectionId = u.sectionId;
         token.clientId = u.clientId ?? null;
+        token.vendorId = u.vendorId ?? null;
       }
       return token;
     },
@@ -56,6 +65,7 @@ export const authConfig = {
           facilityId: token.facilityId,
           sectionId: token.sectionId,
           clientId: token.clientId ?? null,
+          vendorId: token.vendorId ?? null,
           roleKeys: [],
           canReadCrossSection: designation
             ? grantsCrossSectionRead(designation)

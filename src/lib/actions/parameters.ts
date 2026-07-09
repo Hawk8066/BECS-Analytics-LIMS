@@ -17,7 +17,6 @@ const ParameterSchema = z.object({
   lod: z.string().optional(),
   loq: z.string().optional(),
   accredited: z.enum(["on", "true"]).optional(),
-  price: z.string().optional(), // PKR (rupees)
 });
 
 // Propose a parameter (OM / LO / Lab Manager). COO-created ones are auto-approved.
@@ -37,15 +36,6 @@ export async function createParameter(
   if (await prisma.parameter.findUnique({ where: { name: d.name } }))
     return { error: "A parameter with that name already exists." };
 
-  // Price entered in PKR rupees → stored as paisa.
-  let pricePaisa: number | null = null;
-  if (d.price && d.price.trim() !== "") {
-    const rupees = Number(d.price);
-    if (Number.isNaN(rupees) || rupees < 0)
-      return { error: "Price must be a positive number." };
-    pricePaisa = Math.round(rupees * 100);
-  }
-
   const approvedAt = canApproveParameter(actor.designation) ? new Date() : null;
   const p = await prisma.parameter.create({
     data: {
@@ -56,7 +46,6 @@ export async function createParameter(
       lod: d.lod || null,
       loq: d.loq || null,
       accredited: !!d.accredited,
-      price: pricePaisa,
       createdById: actor.id,
       approvedAt,
     },
@@ -72,6 +61,126 @@ export async function createParameter(
 
   revalidatePath("/app/parameters");
   return { ok: true };
+}
+
+// PKR rupees string → paisa; "" ⇒ null (unset); throws on invalid.
+function toPaisa(raw: FormDataEntryValue | null): number | null {
+  const s = String(raw ?? "").trim();
+  if (s === "") return null;
+  const rupees = Number(s);
+  if (Number.isNaN(rupees) || rupees < 0) throw new Error("Invalid price.");
+  return Math.round(rupees * 100);
+}
+
+// Set a parameter's price for a given sector (empty clears it). Sector-based.
+export async function updateParameterSectorPrice(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canManageParameters(actor.designation))
+    throw new Error("Not permitted to set prices.");
+
+  const parameterId = String(formData.get("parameterId"));
+  const sector = String(formData.get("sector"));
+  const price = toPaisa(formData.get("price"));
+
+  if (price === null) {
+    await prisma.parameterSectorPrice.deleteMany({ where: { parameterId, sector } });
+  } else {
+    await prisma.parameterSectorPrice.upsert({
+      where: { parameterId_sector: { parameterId, sector } },
+      update: { price },
+      create: { parameterId, sector, price },
+    });
+  }
+  await writeAudit({
+    actorId: actor.id,
+    action: "UPDATE",
+    entityType: "ParameterSectorPrice",
+    entityId: parameterId,
+    after: { sector, price },
+  });
+  revalidatePath("/app/parameters");
+}
+
+// Create a package (a named bundle of selected parameters).
+export async function createPackage(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireUser();
+  if (!canManageParameters(actor.designation))
+    return { error: "Not permitted to create packages." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2) return { error: "Package name is required." };
+  const parameterIds = formData.getAll("parameterIds").map(String).filter(Boolean);
+  if (parameterIds.length === 0)
+    return { error: "Select at least one parameter." };
+
+  if (await prisma.package.findUnique({ where: { name } }))
+    return { error: "A package with that name already exists." };
+
+  const pkg = await prisma.package.create({
+    data: {
+      name,
+      createdById: actor.id,
+      parameters: { create: parameterIds.map((parameterId) => ({ parameterId })) },
+    },
+  });
+  await writeAudit({
+    actorId: actor.id,
+    action: "CREATE",
+    entityType: "Package",
+    entityId: pkg.id,
+    after: { name, parameters: parameterIds.length },
+  });
+  revalidatePath("/app/parameters");
+  return { ok: true };
+}
+
+// Set a package's price for a given sector (empty clears it).
+export async function updatePackageSectorPrice(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canManageParameters(actor.designation))
+    throw new Error("Not permitted to set prices.");
+
+  const packageId = String(formData.get("packageId"));
+  const sector = String(formData.get("sector"));
+  const price = toPaisa(formData.get("price"));
+
+  if (price === null) {
+    await prisma.packageSectorPrice.deleteMany({ where: { packageId, sector } });
+  } else {
+    await prisma.packageSectorPrice.upsert({
+      where: { packageId_sector: { packageId, sector } },
+      update: { price },
+      create: { packageId, sector, price },
+    });
+  }
+  await writeAudit({
+    actorId: actor.id,
+    action: "UPDATE",
+    entityType: "PackageSectorPrice",
+    entityId: packageId,
+    after: { sector, price },
+  });
+  revalidatePath("/app/parameters");
+}
+
+// Delete a package (and its parameter links + sector prices, via cascade).
+export async function deletePackage(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canManageParameters(actor.designation))
+    throw new Error("Not permitted to delete packages.");
+
+  const id = String(formData.get("packageId"));
+  await prisma.package.delete({ where: { id } });
+  await writeAudit({
+    actorId: actor.id,
+    action: "DELETE",
+    entityType: "Package",
+    entityId: id,
+  });
+  revalidatePath("/app/parameters");
 }
 
 // COO approves a proposed parameter (makes it selectable for samples).

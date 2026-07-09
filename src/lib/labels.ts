@@ -4,6 +4,7 @@ import type { Designation } from "@prisma/client";
 export const DESIGNATION_LABELS: Record<Designation, string> = {
   ADMIN: "Administrator",
   CLIENT: "Client",
+  VENDOR: "Vendor",
   COO: "COO",
   OPERATIONS_MANAGER: "Operations Manager",
   LAB_MANAGER_RYK: "Lab Manager (RYK)",

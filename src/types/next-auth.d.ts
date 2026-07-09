@@ -10,6 +10,7 @@ declare module "next-auth" {
       facilityId: string;
       sectionId: string;
       clientId: string | null;
+      vendorId: string | null;
       roleKeys: string[];
       canReadCrossSection: boolean;
     } & DefaultSession["user"];
@@ -21,6 +22,7 @@ declare module "next-auth" {
     facilityId?: string;
     sectionId?: string;
     clientId?: string | null;
+    vendorId?: string | null;
   }
 }
 
@@ -32,5 +34,6 @@ declare module "next-auth/jwt" {
     facilityId?: string;
     sectionId?: string;
     clientId?: string | null;
+    vendorId?: string | null;
   }
 }

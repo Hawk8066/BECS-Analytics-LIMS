@@ -128,7 +128,7 @@ export default async function ReportPage({
                 <TableRow key={sp.id}>
                   <TableCell>{sp.parameter.name}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {sp.parameter.unit || "—"}
+                    {sp.unit || sp.parameter.unit || "—"}
                   </TableCell>
                   <TableCell>{sp.resultValue || "—"}</TableCell>
                   <TableCell>

@@ -6,20 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectOrOther } from "@/components/ui/select-or-other";
-
-const UNITS = [
-  "%",
-  "mg/kg",
-  "ppm",
-  "mg/L",
-  "g/L",
-  "ppb",
-  "µg/L",
-  "meq/100g",
-  "pH",
-  "NTU",
-  "mS/cm",
-];
+import { UNITS } from "@/lib/units";
 
 const MATRICES = [
   "Fertilizer",
@@ -63,10 +50,6 @@ export function ParameterForm({ onDone }: { onDone?: () => void }) {
         <div className="grid gap-1.5">
           <Label htmlFor="loq">LOQ</Label>
           <Input id="loq" name="loq" placeholder="Limit of quantification" />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="price">Price (PKR)</Label>
-          <Input id="price" name="price" type="number" step="0.01" min="0" placeholder="5000" />
         </div>
       </div>
       <div className="flex items-center gap-4">

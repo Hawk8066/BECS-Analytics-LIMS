@@ -9,6 +9,7 @@ export interface SessionUser {
   facilityId: string;
   sectionId: string;
   clientId: string | null;
+  vendorId: string | null;
   roleKeys: string[];
   // Senior roles (COO, OM) get cross-section/facility read (SSOT §7).
   canReadCrossSection: boolean;

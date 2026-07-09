@@ -224,7 +224,7 @@ export default async function SampleDetailPage({
             </span>
           </div>
           <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
-            <span className="text-muted-foreground">Client sample ref</span>
+            <span className="text-muted-foreground">Client Sample ID</span>
             <span>{sample.clientSampleRef || "—"}</span>
           </div>
           <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
@@ -253,8 +253,8 @@ export default async function SampleDetailPage({
                 <TableRow key={sp.id}>
                   <TableCell>
                     {sp.parameter.name}
-                    {sp.parameter.unit && (
-                      <span className="text-muted-foreground"> ({sp.parameter.unit})</span>
+                    {(sp.unit || sp.parameter.unit) && (
+                      <span className="text-muted-foreground"> ({sp.unit || sp.parameter.unit})</span>
                     )}
                   </TableCell>
                   <TableCell>{sp.resultValue || "—"}</TableCell>

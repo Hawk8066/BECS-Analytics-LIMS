@@ -7,6 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectOrOther } from "@/components/ui/select-or-other";
+import { SECTORS } from "@/lib/sectors";
 
 const PROVINCES = [
   "Punjab",
@@ -50,16 +51,6 @@ const COUNTRIES = [
   "United States",
 ];
 
-const SECTORS = [
-  "Fertilizer",
-  "Food",
-  "Packaging",
-  "Pesticide",
-  "Pharmaceuticals",
-  "Seeds",
-  "Chemical",
-  "Agriculture",
-];
 
 function Text({ name, label }: { name: string; label: string }) {
   return (

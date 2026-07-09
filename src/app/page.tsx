@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { BecsLogo } from "@/components/becs-logo";
 
+const SIGNIN_LINKS = [
+  { key: "lahore-lab", label: "Lahore Lab" },
+  { key: "ryk-lab", label: "RYK Lab" },
+  { key: "client", label: "Client" },
+  { key: "vendor", label: "Vendor" },
+  { key: "management", label: "Management" },
+];
+
 const MODULES = [
   { n: "01", name: "Personnel", desc: "HR, functions, competence, authorization, attendance, leave" },
   { n: "02", name: "Inventory & Procurement", desc: "Stores, procurement workflow, vendors, utilities" },
@@ -23,12 +31,17 @@ export default function Home() {
             Lahore (Parent Lab) &middot; Rahimyar Khan (on-site QC Sub-Lab)
           </p>
         </div>
-        <Link
-          href="/login"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-        >
-          Sign in
-        </Link>
+        <div className="flex max-w-[320px] flex-wrap justify-end gap-2">
+          {SIGNIN_LINKS.map((s) => (
+            <Link
+              key={s.key}
+              href={`/login?as=${s.key}`}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              {s.label}
+            </Link>
+          ))}
+        </div>
       </header>
 
       <ul className="grid gap-3 sm:grid-cols-2">

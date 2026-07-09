@@ -36,6 +36,7 @@ enum SectionType {
 enum Designation {
   ADMIN // application super-admin: full view/edit/delete across all modules + audit
   CLIENT // external client portal login (see own details/samples/reports only)
+  VENDOR // external vendor portal login (see own POs/quotations only)
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
@@ -257,9 +258,11 @@ model User {
   manager   User?   @relation("UserManager", fields: [managerId], references: [id])
   reports   User[]  @relation("UserManager")
 
-  // External client portal login: links this account to a Client (CLIENT designation).
+  // External portal logins: link this account to a Client / Vendor.
   clientId String?
   client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
+  vendorId String?
+  vendor   Vendor? @relation("VendorPortalUser", fields: [vendorId], references: [id])
 
   profile        PersonnelProfile?
   roles          UserRole[]
@@ -283,6 +286,7 @@ model User {
   @@index([sectionId])
   @@index([managerId])
   @@index([clientId])
+  @@index([vendorId])
 }
 
 // Full HR profile (Module 01). OM enters the shell fields on User; the user
@@ -691,6 +695,52 @@ model Parameter {
   createdAt   DateTime  @default(now())
 
   sampleParameters SampleParameter[]
+  sectorPrices     ParameterSectorPrice[]
+  packageLinks     PackageParameter[]
+}
+
+// Per-sector price for a parameter (PKR paisa). Pricing is sector-based.
+model ParameterSectorPrice {
+  id          String    @id @default(uuid())
+  parameterId String
+  parameter   Parameter @relation(fields: [parameterId], references: [id], onDelete: Cascade)
+  sector      String
+  price       Int // paisa
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([parameterId, sector])
+  @@index([parameterId])
+}
+
+// A named bundle of parameters offered as a package; priced per sector.
+model Package {
+  id          String               @id @default(uuid())
+  name        String               @unique
+  createdById String?
+  createdAt   DateTime             @default(now())
+  parameters  PackageParameter[]
+  prices      PackageSectorPrice[]
+}
+
+model PackageParameter {
+  packageId   String
+  package     Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  parameterId String
+  parameter   Parameter @relation(fields: [parameterId], references: [id])
+
+  @@id([packageId, parameterId])
+  @@index([parameterId])
+}
+
+model PackageSectorPrice {
+  id        String   @id @default(uuid())
+  packageId String
+  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  sector    String
+  price     Int // paisa
+  updatedAt DateTime @updatedAt
+
+  @@unique([packageId, sector])
 }
 
 model TestMethod {
@@ -740,6 +790,7 @@ model SampleParameter {
   sample              Sample      @relation(fields: [sampleId], references: [id])
   parameterId         String
   parameter           Parameter   @relation(fields: [parameterId], references: [id])
+  unit                String? // unit chosen for this sample (may differ from the parameter default)
   testMethodId        String?
   testMethod          TestMethod? @relation(fields: [testMethodId], references: [id])
   resultValue         String?
@@ -782,6 +833,7 @@ model Vendor {
   contactNumber String?
   ntn           String?
   stn           String?
+  email         String? // vendor portal login
   employees     Int?
   fields        String[] // categories supplied (Equipment, Chemicals, Calibration, ...)
   accountNumber String?
@@ -790,6 +842,7 @@ model Vendor {
 
   quotations     Quotation[]
   purchaseOrders PurchaseOrder[]
+  portalUsers    User[]          @relation("VendorPortalUser")
 
   @@index([company])
 }
