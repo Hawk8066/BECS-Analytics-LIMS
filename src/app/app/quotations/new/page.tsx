@@ -1,62 +1,47 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canRegisterSample } from "@/lib/auth/perms";
-import { SampleForm } from "../sample-form";
+import { canManageQuotations } from "@/lib/auth/perms";
+import { QuotationForm } from "../quotation-form";
 
-export default async function NewSamplePage() {
+export default async function NewQuotationPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
-  if (!canRegisterSample(user.designation)) redirect("/app/samples");
+  if (!canManageQuotations(user.designation)) redirect("/app/quotations");
 
-  const [clients, parameters, facilities, packages] = await Promise.all([
-    prisma.client.findMany({
-      where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
-      orderBy: { company: "asc" },
-    }),
+  const [clients, parameters, packages] = await Promise.all([
+    prisma.client.findMany({ orderBy: { company: "asc" } }),
     prisma.parameter.findMany({
       where: { approvedAt: { not: null } },
       include: { sectorPrices: true },
       orderBy: { name: "asc" },
     }),
-    prisma.facility.findMany({ orderBy: { code: "asc" } }),
     prisma.package.findMany({
       orderBy: { name: "asc" },
       include: { parameters: { select: { parameterId: true } }, prices: true },
     }),
   ]);
 
-  const LAB_NAMES: Record<string, string> = {
-    LAHORE: "Lahore",
-    RYK: "Rahimyar Khan",
-  };
-  const labs = facilities.map((f) => ({ id: f.id, name: LAB_NAMES[f.code] ?? f.name }));
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Register sample</h1>
+        <h1 className="text-2xl font-semibold">New quotation</h1>
         <p className="text-sm text-muted-foreground">
-          A coded Lab ID is assigned; the sample is blinded for testing.
+          Pick a client and sector, then select parameters/packages; prices come
+          from the sector price list.
         </p>
       </div>
-      <SampleForm
-        labs={labs}
-        defaultLabId={user.facilityId}
+      <QuotationForm
+        clients={clients.map((c) => ({ id: c.id, label: c.company }))}
         matrices={[
           ...new Set(parameters.map((p) => p.matrix).filter((m): m is string => !!m)),
         ].sort()}
-        clients={clients.map((c) => ({
-          id: c.id,
-          label: c.company,
-        }))}
         parameters={parameters.map((p) => ({
           id: p.id,
           name: p.name,
           unit: p.unit,
           matrix: p.matrix,
-          accredited: p.accredited,
           prices: Object.fromEntries(p.sectorPrices.map((sp) => [sp.sector, sp.price])),
         }))}
         packages={packages.map((pkg) => ({

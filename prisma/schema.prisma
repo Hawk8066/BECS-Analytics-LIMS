@@ -278,6 +278,7 @@ model User {
   leaveApplications LeaveApplication[] @relation("LeaveApplicant")
   leaveDecisions    LeaveApplication[] @relation("LeaveApprover")
   undertakings      ImpartialityUndertaking[]
+  qcLotsAssigned    QcLot[]            @relation("QcLotAnalyst")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,15 +675,48 @@ model Client {
   samples  Sample[]
   invoices Invoice[]
   portalUsers User[] @relation("ClientPortalUser")
+  testQuotations TestQuotation[]
 
   @@index([facilityId])
+}
+
+// Client-facing quotation for testing services (priced from sector prices &
+// packages). Items are snapshotted so the quote is immutable once created.
+model TestQuotation {
+  id          String              @id @default(uuid())
+  quoteNo     String              @unique
+  clientId    String
+  client      Client              @relation(fields: [clientId], references: [id])
+  sector      String?
+  status      String              @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED
+  validUntil  DateTime?
+  subtotal    Int                 @default(0) // PKR paisa
+  note        String?
+  createdById String?
+  createdAt   DateTime            @default(now())
+
+  items TestQuotationItem[]
+
+  @@index([clientId])
+}
+
+model TestQuotationItem {
+  id          String        @id @default(uuid())
+  quotationId String
+  quotation   TestQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  kind        String // PARAMETER | PACKAGE
+  refId       String?
+  name        String
+  price       Int // PKR paisa
+
+  @@index([quotationId])
 }
 
 // Master parameter (Module 04 owns these; Samples reads them). `accredited`
 // drives the List of Accredited Parameters. Price in PKR paisa (SSOT §15).
 model Parameter {
   id          String    @id @default(uuid())
-  name        String    @unique
+  name        String
   unit        String?
   matrix      String? // sample matrix (e.g. Soil, Water, Fertilizer)
   method      String? // test method / reference
@@ -697,6 +731,10 @@ model Parameter {
   sampleParameters SampleParameter[]
   sectorPrices     ParameterSectorPrice[]
   packageLinks     PackageParameter[]
+
+  // A parameter is unique per (name, matrix) — the same test can exist for
+  // different matrices with its own method/unit.
+  @@unique([name, matrix])
 }
 
 // Per-sector price for a parameter (PKR paisa). Pricing is sector-based.
@@ -917,6 +955,54 @@ model Store {
 
   stock StockTransaction[]
   grns  GRN[]
+  items InventoryItem[]
+}
+
+// User-reported stock level for an inventory item.
+enum StockStatus {
+  OK
+  LOW // running low — needs reordering
+  END // finished / out of stock
+}
+
+enum InventoryCategory {
+  CHEMICAL // lab chemicals register (rack + lot)
+  STANDARD_SOLUTION // reference standards / buffer solutions
+  GLASSWARE
+  EQUIPMENT
+  STORE_ITEM // bulk chemicals held in the store
+  MISCELLANEOUS // consumables (gloves, filter paper, …)
+  STATIONERY
+}
+
+// Inventory register for a store — the standing list of chemicals, glassware and
+// equipment (imported from the lab's inventory workbook). Distinct from the
+// transactional StockTransaction ledger; this is the catalog with locations,
+// pack sizes, makes/models and on-hand counts.
+model InventoryItem {
+  id         String            @id @default(uuid())
+  storeId    String
+  store      Store             @relation(fields: [storeId], references: [id])
+  category   InventoryCategory
+  code       String? // item ID / equipment code
+  name       String
+  pack       String? // chemical pack size (e.g. "500 g")
+  rack       String? // storage location (e.g. "R1")
+  make       String? // glassware/equipment make
+  model      String? // equipment model
+  parts      String? // equipment parts/accessories
+  subCategory String? // chemical category (Salt/Acid/…)
+  quantity   Int? // on-hand balance ("Nill" → 0)
+  lotNo      String? // LOT / batch number
+  stockStatus     StockStatus @default(OK) // user-reported level (low / finished)
+  stockMarkedById String?
+  stockMarkedAt   DateTime?
+  facilityId String
+  createdAt  DateTime          @default(now())
+
+  @@index([storeId])
+  @@index([facilityId])
+  @@index([category])
 }
 
 // A delivery against a PO. Multiple per PO supports partial receipts (BR-19).
@@ -1178,14 +1264,113 @@ model IssueRequest {
 }
 
 model PRLine {
-  id          String          @id @default(uuid())
-  prId        String
-  pr          PurchaseRequest @relation(fields: [prId], references: [id])
-  description String
-  category    ItemCategory
-  path        ProcurementPath
-  quantity    Int             @default(1)
-  unit        String?
+  id            String          @id @default(uuid())
+  prId          String
+  pr            PurchaseRequest @relation(fields: [prId], references: [id])
+  description   String // "Name of item/services" on the requisition form
+  specification String? // technical spec / grade / model
+  category      ItemCategory
+  path          ProcurementPath
+  quantity      Int             @default(1)
+  unit          String?
+  justification String? // why the item is needed
+  priority      String? // Low | Normal | High | Urgent
 
   @@index([prId])
+}
+
+// ── Production QC & traceability (RYK) ────────────────────────────────────────
+// Zinc-content testing along a production chain: Raw Zinc (per vehicle) → AOM
+// (per batch) → Zabardast Urea (per batch). Each product is sampled and tested
+// for a parameter, with results traced upstream through parent lots.
+
+enum ProductStage {
+  RAW // raw material (e.g. Raw Zinc)
+  INTERMEDIATE // in-process product (e.g. AOM)
+  FINISHED // finished product (e.g. Zabardast Urea)
+}
+
+enum LotBasis {
+  VEHICLE // each incoming vehicle load is a lot
+  BATCH // each production batch is a lot
+}
+
+enum QcLotStatus {
+  BOOKED // sample booked + assigned, awaiting analyst result
+  SUBMITTED // analyst submitted result, awaiting Lab Manager review
+  APPROVED // result reviewed & approved
+  REJECTED // result rejected / sent back
+}
+
+// A product/raw-material type with its test parameter, identity basis, spec
+// limits, and the parent product it traces to (self-referential lineage).
+model ProductType {
+  id            String       @id @default(uuid())
+  name          String
+  stage         ProductStage
+  basis         LotBasis
+  testParameter String // e.g. "Total Zinc", "Bio-Active Zinc"
+  unit          String       @default("%")
+  specMin       Float? // acceptable minimum for auto pass/fail
+  specMax       Float? // acceptable maximum (optional)
+  parentTypeId  String?
+  parentType    ProductType?  @relation("ProductLineage", fields: [parentTypeId], references: [id])
+  children      ProductType[] @relation("ProductLineage")
+  sortOrder     Int          @default(0)
+  facilityId    String
+  createdAt     DateTime     @default(now())
+
+  lots QcLot[]
+
+  @@unique([facilityId, name])
+}
+
+// A physical lot sampled for QC — a vehicle load or a production batch. Carries
+// the manual production number (refNo) plus an auto lab number (lotNo), a single
+// primary result, and many-to-many parent links for blended traceability.
+model QcLot {
+  id            String      @id @default(uuid())
+  lotNo         String      @unique // auto lab number, e.g. RYK-QC-2026-0001
+  productTypeId String
+  productType   ProductType @relation(fields: [productTypeId], references: [id])
+  refNo         String // manual vehicle/batch number from production
+  producedOn    DateTime?
+  quantity      Float?
+  quantityUnit  String?
+  source        String? // supplier/origin for raw materials
+  note          String?
+  status        QcLotStatus @default(BOOKED)
+  resultValue   Float?
+  verdict       String? // PASS | FAIL (from spec at test time)
+  bookedById    String?
+  assignedToId  String? // analyst the Lab Manager assigned the sample to
+  assignedTo    User?       @relation("QcLotAnalyst", fields: [assignedToId], references: [id])
+  testedById    String? // analyst who submitted the result
+  testedAt      DateTime?
+  approvedById  String? // Lab Manager who reviewed
+  approvedAt    DateTime?
+  facilityId    String
+  createdAt     DateTime    @default(now())
+
+  parents  QcLotLink[] @relation("LotChild")
+  children QcLotLink[] @relation("LotParent")
+
+  @@index([productTypeId])
+  @@index([facilityId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+// Many-to-many lot genealogy: a child lot (e.g. AOM batch) is built from one or
+// more parent lots (e.g. raw-zinc vehicles).
+model QcLotLink {
+  id          String @id @default(uuid())
+  childLotId  String
+  parentLotId String
+  child       QcLot  @relation("LotChild", fields: [childLotId], references: [id], onDelete: Cascade)
+  parent      QcLot  @relation("LotParent", fields: [parentLotId], references: [id], onDelete: Cascade)
+
+  @@unique([childLotId, parentLotId])
+  @@index([childLotId])
+  @@index([parentLotId])
 }

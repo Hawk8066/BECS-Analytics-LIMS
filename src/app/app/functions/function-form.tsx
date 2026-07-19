@@ -49,10 +49,10 @@ export function FunctionForm() {
       <div className="grid gap-2">
         <Label>Code</Label>
         <div className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm text-muted-foreground">
-          BECS/{new Date().getFullYear()}/Function/####
+          BECS/602/Functions/####
         </div>
         <p className="text-xs text-muted-foreground">
-          Auto-generated on creation (e.g. BECS/{new Date().getFullYear()}/Function/0001).
+          Auto-generated on creation (e.g. BECS/602/Functions/0001).
         </p>
       </div>
       <div className="grid gap-2">

@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/format";
+import { designationLabel } from "@/lib/labels";
 import { prisma } from "@/lib/db";
 import {
   canApprovePR,
@@ -88,14 +90,28 @@ export default async function PRDetailPage({
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-mono text-2xl font-semibold">{pr.prNo}</h1>
-          <p className="text-sm text-muted-foreground">
-            Raised by {requester?.profile?.fullName ?? requester?.email ?? "—"}
+          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+            Purchase Requisition Form · BECS/FF/606/05
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Raised by{" "}
+            {requester?.profile?.fullName ?? requester?.email ?? "—"}
+            {requester ? ` · ${designationLabel(requester.designation)}` : ""} ·{" "}
+            {formatDate(pr.createdAt)}
           </p>
         </div>
-        <Badge>{pr.status}</Badge>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/app/procurement/${pr.id}/print`}
+            className="text-sm text-muted-foreground underline"
+          >
+            Print
+          </Link>
+          <Badge>{pr.status}</Badge>
+        </div>
       </div>
 
       <Card>
@@ -414,38 +430,68 @@ export default async function PRDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Line items</CardTitle>
+          <CardTitle className="text-base">Requested items</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Path</TableHead>
-                <TableHead>Qty</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pr.lines.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell>{l.description}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {l.category}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={l.path === "FULL" ? "default" : "secondary"}>
-                      {l.path}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {l.quantity}
-                    {l.unit ? ` ${l.unit}` : ""}
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">Sr#</TableHead>
+                  <TableHead>Name of item / services</TableHead>
+                  <TableHead>Specification</TableHead>
+                  <TableHead>Qty</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Path</TableHead>
+                  <TableHead>Justification</TableHead>
+                  <TableHead>Priority</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {pr.lines.map((l, i) => (
+                  <TableRow key={l.id}>
+                    <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                    <TableCell className="font-medium">{l.description}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {l.specification || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {l.quantity}
+                      {l.unit ? ` ${l.unit}` : ""}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {l.category}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={l.path === "FULL" ? "default" : "secondary"}>
+                        {l.path}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {l.justification || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {l.priority ? (
+                        <Badge
+                          variant={
+                            l.priority === "Urgent"
+                              ? "destructive"
+                              : l.priority === "High"
+                                ? "default"
+                                : "secondary"
+                          }
+                        >
+                          {l.priority}
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           {pr.note && (
             <p className="text-sm text-muted-foreground">Note: {pr.note}</p>
           )}

@@ -43,9 +43,12 @@ export default async function AppLayout({
         {
           title: "Samples & Testing",
           items: [
+            { href: "/app/overview", label: "Overview" },
             { href: "/app/clients", label: "Clients" },
             { href: "/app/samples", label: "Samples" },
             { href: "/app/parameters", label: "Parameters" },
+            { href: "/app/quotations", label: "Quotations" },
+            { href: "/app/production", label: "Production QC" },
           ],
         },
         {

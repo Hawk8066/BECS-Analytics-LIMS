@@ -58,15 +58,14 @@ export async function createFunction(
     .map((t) => String(t).trim())
     .filter(Boolean);
 
-  // Auto-generate the code: BECS/<year>/Function/<NNNN> with a gap-free,
-  // concurrency-safe per-year serial.
-  const year = new Date().getFullYear();
+  // Auto-generate the code: BECS/602/Functions/<NNNN> with a gap-free,
+  // concurrency-safe serial.
   const seq = await prisma.sequence.upsert({
-    where: { key: `FUNCTION:${year}` },
+    where: { key: "FUNCTION" },
     update: { counter: { increment: 1 } },
-    create: { key: `FUNCTION:${year}`, prefix: "BECS/Function", year, counter: 1 },
+    create: { key: "FUNCTION", prefix: "BECS/602/Functions", counter: 1 },
   });
-  const code = `BECS/${year}/Function/${String(seq.counter).padStart(4, "0")}`;
+  const code = `BECS/602/Functions/${String(seq.counter).padStart(4, "0")}`;
 
   const approvedAt = actor.designation === "COO" ? new Date() : null;
   const fn = await prisma.function.create({

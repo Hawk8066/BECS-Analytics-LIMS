@@ -13,6 +13,7 @@ interface ParamOpt {
   id: string;
   name: string;
   unit: string | null;
+  matrix: string | null;
   accredited: boolean;
   prices: Record<string, number>; // sector -> paisa
 }
@@ -30,12 +31,14 @@ function pkr(paisa: number | undefined): string {
 export function SampleForm({
   labs,
   defaultLabId,
+  matrices,
   clients,
   parameters,
   packages,
 }: {
   labs: { id: string; name: string }[];
   defaultLabId?: string;
+  matrices: string[];
   clients: { id: string; label: string }[];
   parameters: ParamOpt[];
   packages: PackageOpt[];
@@ -46,12 +49,18 @@ export function SampleForm({
   );
   // Sector is chosen per sample (any client may request any sector).
   const [sector, setSector] = useState("");
+  const [matrix, setMatrix] = useState("");
   const [params, setParams] = useState<Set<string>>(new Set());
   const [pkgs, setPkgs] = useState<Set<string>>(new Set());
 
   const sectorPackages = useMemo(
     () => (sector ? packages.filter((p) => p.prices[sector] != null) : []),
     [sector, packages],
+  );
+  // The parameter list is filtered by the chosen matrix (there are many).
+  const matrixParams = useMemo(
+    () => (matrix ? parameters.filter((p) => p.matrix === matrix) : []),
+    [matrix, parameters],
   );
 
   const toggle = (set: Set<string>, id: string) => {
@@ -141,37 +150,50 @@ export function SampleForm({
         <Textarea id="instructions" name="instructions" />
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="sector">Sector (for pricing)</Label>
-        <select
-          id="sector"
-          name="sector"
-          value={sector}
-          onChange={(e) => setSector(e.target.value)}
-          className="h-9 rounded-md border bg-transparent px-3 text-sm"
-        >
-          <option value="">Select sector…</option>
-          {SECTORS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">
-          Any client can request any sector; this drives parameter prices &amp; packages.
-        </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="sector">Sector (for pricing)</Label>
+          <select
+            id="sector"
+            name="sector"
+            value={sector}
+            onChange={(e) => setSector(e.target.value)}
+            className="h-9 rounded-md border bg-transparent px-3 text-sm"
+          >
+            <option value="">Select sector…</option>
+            {SECTORS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="matrix">Matrix (filters parameters)</Label>
+          <select
+            id="matrix"
+            value={matrix}
+            onChange={(e) => setMatrix(e.target.value)}
+            className="h-9 rounded-md border bg-transparent px-3 text-sm"
+          >
+            <option value="">Select matrix…</option>
+            {matrices.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        Any client can request any sector; sector drives prices &amp; packages, matrix
+        narrows the parameter list.
+      </p>
 
-      {!sector ? (
-        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          Select a sector to see the parameters and packages.
-        </p>
-      ) : (
-        <>
-          {sectorPackages.length > 0 && (
-            <fieldset className="grid gap-2 rounded-md border p-3">
-              <legend className="px-1 text-sm font-medium">Packages ({sector})</legend>
-              {sectorPackages.map((pkg) => (
+      {sector && sectorPackages.length > 0 && (
+        <fieldset className="grid gap-2 rounded-md border p-3">
+          <legend className="px-1 text-sm font-medium">Packages ({sector})</legend>
+          {sectorPackages.map((pkg) => (
                 <label key={pkg.id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -190,9 +212,10 @@ export function SampleForm({
             </fieldset>
           )}
 
-          <fieldset className="grid gap-2 rounded-md border p-3">
-            <legend className="px-1 text-sm font-medium">Parameters</legend>
-            {parameters.map((p) => {
+      {matrix ? (
+        <fieldset className="grid gap-2 rounded-md border p-3">
+          <legend className="px-1 text-sm font-medium">Parameters ({matrix})</legend>
+          {matrixParams.map((p) => {
               const unitOptions =
                 p.unit && !UNITS.includes(p.unit) ? [p.unit, ...UNITS] : UNITS;
               return (
@@ -229,14 +252,22 @@ export function SampleForm({
                 </div>
               );
             })}
-          </fieldset>
-
-          <div className="flex justify-end text-sm">
-            <span className="text-muted-foreground">Estimated total:&nbsp;</span>
-            <span className="font-medium">{pkr(total)}</span>
-          </div>
-        </>
+          {matrixParams.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No parameters configured for this matrix.
+            </p>
+          )}
+        </fieldset>
+      ) : (
+        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Select a matrix to choose parameters.
+        </p>
       )}
+
+      <div className="flex justify-end text-sm">
+        <span className="text-muted-foreground">Estimated total:&nbsp;</span>
+        <span className="font-medium">{pkr(total)}</span>
+      </div>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <div>

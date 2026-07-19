@@ -118,11 +118,11 @@ async function main() {
     { name: "Moisture", unit: "%", accredited: false, price: 250000 },
   ];
   for (const p of parameters) {
-    await prisma.parameter.upsert({
-      where: { name: p.name },
-      update: {},
-      create: p,
+    // name is unique per (name, matrix); seed params have no matrix (null).
+    const existing = await prisma.parameter.findFirst({
+      where: { name: p.name, matrix: null },
     });
+    if (!existing) await prisma.parameter.create({ data: p });
   }
 
   // --- Test methods (master) ---
@@ -163,8 +163,8 @@ async function main() {
 
   // --- Demo samples (for workflow + report rendering) ---
   const agri = await prisma.client.findUnique({ where: { clientNo: "CLI-00002" } });
-  const pH = await prisma.parameter.findUnique({ where: { name: "pH" } });
-  const moisture = await prisma.parameter.findUnique({ where: { name: "Moisture" } });
+  const pH = await prisma.parameter.findFirst({ where: { name: "pH" } });
+  const moisture = await prisma.parameter.findFirst({ where: { name: "Moisture" } });
   const lahoreLab = sectionIds.LAHORE_LAB!;
   if (agri && pH && moisture) {
     // S1 — newly registered (awaiting assignment)

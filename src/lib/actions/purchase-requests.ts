@@ -22,16 +22,22 @@ export async function createPR(
   const actor = await requireUser();
 
   const descriptions = formData.getAll("description").map(String);
+  const specifications = formData.getAll("specification").map(String);
   const categories = formData.getAll("category").map(String);
   const quantities = formData.getAll("quantity").map(String);
   const units = formData.getAll("unit").map(String);
+  const justifications = formData.getAll("justification").map(String);
+  const priorities = formData.getAll("priority").map(String);
 
   const lines: {
     description: string;
+    specification: string | null;
     category: ItemCategory;
     path: ReturnType<typeof pathForCategory>;
     quantity: number;
     unit: string | null;
+    justification: string | null;
+    priority: string | null;
   }[] = [];
   for (let i = 0; i < descriptions.length; i++) {
     const description = descriptions[i]?.trim();
@@ -40,10 +46,13 @@ export async function createPR(
     if (!VALID_CATEGORIES.includes(category)) continue;
     lines.push({
       description,
+      specification: specifications[i]?.trim() || null,
       category: category as ItemCategory,
       path: pathForCategory(category as ItemCategory),
       quantity: parseInt(quantities[i] || "1", 10) || 1,
       unit: units[i]?.trim() || null,
+      justification: justifications[i]?.trim() || null,
+      priority: priorities[i]?.trim() || null,
     });
   }
   if (lines.length === 0) return { error: "Add at least one line item." };

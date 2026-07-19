@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
@@ -50,6 +51,19 @@ export default async function ParametersPage() {
     prices: Object.fromEntries(pkg.prices.map((p) => [p.sector, p.price])),
   }));
 
+  // Group parameters by matrix for the details table.
+  const cols = canApprove ? 8 : 7;
+  const paramGroups = new Map<string, typeof parameters>();
+  for (const p of [...parameters].sort(
+    (a, b) =>
+      (a.matrix ?? "~").localeCompare(b.matrix ?? "~") ||
+      a.name.localeCompare(b.name),
+  )) {
+    const key = p.matrix || "— (no matrix)";
+    if (!paramGroups.has(key)) paramGroups.set(key, []);
+    paramGroups.get(key)!.push(p);
+  }
+
   const detailsPanel = (
     <div className="space-y-6">
       <div className="overflow-x-auto rounded-md border">
@@ -58,7 +72,6 @@ export default async function ParametersPage() {
             <TableRow>
               <TableHead>Parameter</TableHead>
               <TableHead>Unit</TableHead>
-              <TableHead>Matrix</TableHead>
               <TableHead>Method</TableHead>
               <TableHead>LOD</TableHead>
               <TableHead>LOQ</TableHead>
@@ -68,45 +81,56 @@ export default async function ParametersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {parameters.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell className="text-muted-foreground">{p.unit || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{p.matrix || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{p.method || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{p.lod || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{p.loq || "—"}</TableCell>
-                <TableCell>
-                  {p.accredited ? (
-                    <Badge>Accredited</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {p.approvedAt ? (
-                    <Badge>Approved</Badge>
-                  ) : (
-                    <Badge variant="outline">Pending COO</Badge>
-                  )}
-                </TableCell>
-                {canApprove && (
-                  <TableCell className="text-right">
-                    {!p.approvedAt && (
-                      <form action={approveParameter}>
-                        <input type="hidden" name="parameterId" value={p.id} />
-                        <Button size="sm" type="submit">
-                          Approve
-                        </Button>
-                      </form>
-                    )}
+            {[...paramGroups.entries()].map(([matrix, list]) => (
+              <Fragment key={matrix}>
+                <TableRow className="bg-muted/60 hover:bg-muted/60">
+                  <TableCell colSpan={cols} className="font-semibold">
+                    {matrix}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      ({list.length})
+                    </span>
                   </TableCell>
-                )}
-              </TableRow>
+                </TableRow>
+                {list.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.unit || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.method || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.lod || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.loq || "—"}</TableCell>
+                    <TableCell>
+                      {p.accredited ? (
+                        <Badge>Accredited</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {p.approvedAt ? (
+                        <Badge>Approved</Badge>
+                      ) : (
+                        <Badge variant="outline">Pending COO</Badge>
+                      )}
+                    </TableCell>
+                    {canApprove && (
+                      <TableCell className="text-right">
+                        {!p.approvedAt && (
+                          <form action={approveParameter}>
+                            <input type="hidden" name="parameterId" value={p.id} />
+                            <Button size="sm" type="submit">
+                              Approve
+                            </Button>
+                          </form>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </Fragment>
             ))}
             {parameters.length === 0 && (
               <TableRow>
-                <TableCell colSpan={canApprove ? 9 : 8} className="text-center text-muted-foreground">
+                <TableCell colSpan={cols} className="text-center text-muted-foreground">
                   No parameters yet.
                 </TableCell>
               </TableRow>
@@ -121,7 +145,12 @@ export default async function ParametersPage() {
   const pricesPanel = (
     <SectorPrices
       sectors={SECTORS}
-      parameters={parameters.map((p) => ({ id: p.id, name: p.name, unit: p.unit }))}
+      parameters={parameters.map((p) => ({
+        id: p.id,
+        name: p.name,
+        unit: p.unit,
+        matrix: p.matrix,
+      }))}
       prices={priceMap}
       canManage={canManage}
     />
@@ -130,7 +159,7 @@ export default async function ParametersPage() {
   const packagesPanel = (
     <Packages
       sectors={SECTORS}
-      parameters={parameters.map((p) => ({ id: p.id, name: p.name }))}
+      parameters={parameters.map((p) => ({ id: p.id, name: p.name, matrix: p.matrix }))}
       packages={packageData}
       canManage={canManage}
     />

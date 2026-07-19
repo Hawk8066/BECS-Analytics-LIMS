@@ -39,7 +39,7 @@ export default async function FunctionsPage() {
         )}
       </div>
 
-      <div className="rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -53,16 +53,18 @@ export default async function FunctionsPage() {
           <TableBody>
             {functions.map((fn) => (
               <TableRow key={fn.id}>
-                <TableCell className="font-mono text-xs">{fn.code}</TableCell>
-                <TableCell>{fn.name}</TableCell>
-                <TableCell className="max-w-[280px] text-xs text-muted-foreground">
+                <TableCell className="align-top font-mono text-xs">{fn.code}</TableCell>
+                <TableCell className="align-top">
+                  <div className="max-w-[220px] break-words whitespace-normal">{fn.name}</div>
+                </TableCell>
+                <TableCell className="align-top text-xs text-muted-foreground">
                   {fn.requiredEducation.length === 0 &&
                   fn.requiredFields.length === 0 &&
                   fn.requiredTrainings.length === 0 &&
                   fn.minExperienceYears == null ? (
                     "—"
                   ) : (
-                    <div className="space-y-0.5">
+                    <div className="max-w-[520px] space-y-0.5 break-words whitespace-normal">
                       {fn.requiredEducation.length > 0 && (
                         <div>Edu: {fn.requiredEducation.join(", ")}</div>
                       )}
@@ -78,14 +80,14 @@ export default async function FunctionsPage() {
                     </div>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="align-top">
                   {fn.approvedAt ? (
                     <Badge>Approved</Badge>
                   ) : (
                     <Badge variant="outline">Pending COO</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="align-top text-right">
                   {!fn.approvedAt && canApprove && (
                     <form action={approveFunction}>
                       <input type="hidden" name="functionId" value={fn.id} />

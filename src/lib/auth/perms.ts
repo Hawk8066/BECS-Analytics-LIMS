@@ -123,3 +123,30 @@ export const canManageParameters = (d: Designation) =>
 
 /** Only the COO approves parameters (makes them available for samples). */
 export const canApproveParameter = (d: Designation) => isAdmin(d) || d === "COO";
+
+/** Book/assign production-QC lots + set specs: RYK Lab Manager (OM/COO too). */
+export const canManageProductionQc = (d: Designation) =>
+  isAdmin(d) ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "COO";
+
+/** Submit a QC result: the assigned Analyst (managers too; assignment enforced in the action). */
+export const canSubmitResult = (d: Designation) =>
+  isAdmin(d) ||
+  d === "ANALYST" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "COO";
+
+/** Review/approve production-QC results: RYK Lab Manager or COO. */
+export const canApproveLot = (d: Designation) =>
+  isAdmin(d) || d === "LAB_MANAGER_RYK" || d === "COO";
+
+/** Create/manage client quotations for testing (sales/front-office roles). */
+export const canManageQuotations = (d: Designation) =>
+  isAdmin(d) ||
+  d === "LIAISON_OFFICER" ||
+  d === "ACCOUNTANT" ||
+  d === "SALES_MARKETING_OFFICER" ||
+  d === "COO";

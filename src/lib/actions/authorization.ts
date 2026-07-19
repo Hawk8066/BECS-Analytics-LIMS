@@ -72,6 +72,91 @@ export async function recordCompetence(
   return {};
 }
 
+// Record competence for many functions in one pass. The form lists every
+// approved function with a per-row decision (Competent / Not Competent / skip);
+// only the rows an assessor explicitly marks are written.
+export async function recordCompetenceBulk(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireUser();
+  if (!canEvaluateCompetence(actor.designation))
+    return { error: "Not permitted to evaluate competence." };
+
+  const subjectId = String(formData.get("subjectId") ?? "");
+  if (!subjectId) return { error: "Missing subject." };
+
+  const education = String(formData.get("education") ?? "") || null;
+  const experience = String(formData.get("experience") ?? "") || null;
+  const training = String(formData.get("training") ?? "") || null;
+  const skills = String(formData.get("skills") ?? "") || null;
+  const validUntilRaw = String(formData.get("validUntil") ?? "");
+  const validUntil = validUntilRaw ? new Date(validUntilRaw) : null;
+
+  // Collect the per-function decisions (fields named decision_<functionId>).
+  const decisions: { functionId: string; competent: boolean }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("decision_")) continue;
+    const v = String(value);
+    if (v !== "true" && v !== "false") continue; // "skip" or blank → ignore
+    decisions.push({
+      functionId: key.slice("decision_".length),
+      competent: v === "true",
+    });
+  }
+
+  if (decisions.length === 0)
+    return { error: "Select a decision for at least one function." };
+
+  // Only approved functions may be assessed.
+  const approved = new Set(
+    (
+      await prisma.function.findMany({
+        where: {
+          id: { in: decisions.map((d) => d.functionId) },
+          approvedAt: { not: null },
+        },
+        select: { id: true },
+      })
+    ).map((f) => f.id),
+  );
+
+  const toWrite = decisions.filter((d) => approved.has(d.functionId));
+  if (toWrite.length === 0)
+    return { error: "None of the selected functions are approved." };
+
+  await prisma.$transaction(
+    toWrite.map((d) =>
+      prisma.competenceEvaluation.create({
+        data: {
+          subjectId,
+          functionId: d.functionId,
+          evaluatorId: actor.id,
+          competent: d.competent,
+          education,
+          experience,
+          training,
+          skills,
+          remarks: String(formData.get(`remarks_${d.functionId}`) ?? "") || null,
+          result: d.competent ? "Competent" : "Not Competent",
+          validUntil,
+        },
+      }),
+    ),
+  );
+
+  await writeAudit({
+    actorId: actor.id,
+    action: "CREATE",
+    entityType: "CompetenceEvaluation",
+    entityId: subjectId,
+    after: { count: toWrite.length, functionIds: toWrite.map((d) => d.functionId) },
+  });
+
+  revalidatePath(`/app/personnel/${subjectId}`);
+  return {};
+}
+
 // COO grants an authorization — only if a competence record exists (SSOT §6).
 export async function grantAuthorization(formData: FormData): Promise<void> {
   const actor = await requireUser();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   createPackage,
   updatePackageSectorPrice,
@@ -102,12 +102,25 @@ function PackageCard({
 function CreatePackage({
   parameters,
 }: {
-  parameters: { id: string; name: string }[];
+  parameters: { id: string; name: string; matrix: string | null }[];
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     createPackage,
     {},
   );
+  const groups = useMemo(() => {
+    const m = new Map<string, typeof parameters>();
+    for (const p of [...parameters].sort(
+      (a, b) =>
+        (a.matrix ?? "~").localeCompare(b.matrix ?? "~") ||
+        a.name.localeCompare(b.name),
+    )) {
+      const key = p.matrix || "— (no matrix)";
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(p);
+    }
+    return [...m.entries()];
+  }, [parameters]);
 
   return (
     <Card>
@@ -122,12 +135,26 @@ function CreatePackage({
           </div>
           <div className="grid gap-1.5">
             <Label>Parameters</Label>
-            <div className="grid grid-cols-2 gap-2 rounded-md border p-3 sm:grid-cols-3">
-              {parameters.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="parameterIds" value={p.id} className="size-4" />
-                  {p.name}
-                </label>
+            <div className="max-h-96 space-y-3 overflow-y-auto rounded-md border p-3">
+              {groups.map(([matrix, list]) => (
+                <div key={matrix}>
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                    {matrix} ({list.length})
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {list.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="parameterIds"
+                          value={p.id}
+                          className="size-4"
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -150,7 +177,7 @@ export function Packages({
   canManage,
 }: {
   sectors: string[];
-  parameters: { id: string; name: string }[];
+  parameters: { id: string; name: string; matrix: string | null }[];
   packages: PackageData[];
   canManage: boolean;
 }) {

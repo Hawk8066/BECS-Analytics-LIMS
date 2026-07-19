@@ -33,15 +33,16 @@ export async function createParameter(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const d = parsed.data;
 
-  if (await prisma.parameter.findUnique({ where: { name: d.name } }))
-    return { error: "A parameter with that name already exists." };
+  const matrix = d.matrix || null;
+  if (await prisma.parameter.findFirst({ where: { name: d.name, matrix } }))
+    return { error: "A parameter with that name and matrix already exists." };
 
   const approvedAt = canApproveParameter(actor.designation) ? new Date() : null;
   const p = await prisma.parameter.create({
     data: {
       name: d.name,
       unit: d.unit || null,
-      matrix: d.matrix || null,
+      matrix,
       method: d.method || null,
       lod: d.lod || null,
       loq: d.loq || null,

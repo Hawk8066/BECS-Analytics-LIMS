@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { updateParameterSectorPrice } from "@/lib/actions/parameters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export interface PriceParam {
   id: string;
   name: string;
   unit: string | null;
+  matrix: string | null;
 }
 
 export function SectorPrices({
@@ -38,6 +39,21 @@ export function SectorPrices({
     const paisa = prices[pid]?.[sector];
     return paisa != null ? paisa / 100 : "";
   };
+
+  // Group parameters by matrix.
+  const groups = useMemo(() => {
+    const m = new Map<string, PriceParam[]>();
+    for (const p of [...parameters].sort(
+      (a, b) =>
+        (a.matrix ?? "~").localeCompare(b.matrix ?? "~") ||
+        a.name.localeCompare(b.name),
+    )) {
+      const key = p.matrix || "— (no matrix)";
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(p);
+    }
+    return [...m.entries()];
+  }, [parameters]);
 
   return (
     <div className="space-y-4">
@@ -72,37 +88,49 @@ export function SectorPrices({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {parameters.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell className="text-muted-foreground">{p.unit || "—"}</TableCell>
-                <TableCell>
-                  {canManage ? (
-                    <form
-                      action={updateParameterSectorPrice}
-                      className="flex items-center gap-2"
-                    >
-                      <input type="hidden" name="parameterId" value={p.id} />
-                      <input type="hidden" name="sector" value={sector} />
-                      <Input
-                        key={sector}
-                        name="price"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={rupees(p.id)}
-                        className="h-8 w-32"
-                        placeholder="—"
-                      />
-                      <Button size="sm" type="submit">
-                        Save
-                      </Button>
-                    </form>
-                  ) : (
-                    <span>{rupees(p.id) === "" ? "—" : `PKR ${rupees(p.id)}`}</span>
-                  )}
-                </TableCell>
-              </TableRow>
+            {groups.map(([matrix, list]) => (
+              <Fragment key={matrix}>
+                <TableRow className="bg-muted/60 hover:bg-muted/60">
+                  <TableCell colSpan={3} className="font-semibold">
+                    {matrix}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      ({list.length})
+                    </span>
+                  </TableCell>
+                </TableRow>
+                {list.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.unit || "—"}</TableCell>
+                    <TableCell>
+                      {canManage ? (
+                        <form
+                          action={updateParameterSectorPrice}
+                          className="flex items-center gap-2"
+                        >
+                          <input type="hidden" name="parameterId" value={p.id} />
+                          <input type="hidden" name="sector" value={sector} />
+                          <Input
+                            key={sector}
+                            name="price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={rupees(p.id)}
+                            className="h-8 w-32"
+                            placeholder="—"
+                          />
+                          <Button size="sm" type="submit">
+                            Save
+                          </Button>
+                        </form>
+                      ) : (
+                        <span>{rupees(p.id) === "" ? "—" : `PKR ${rupees(p.id)}`}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
             ))}
             {parameters.length === 0 && (
               <TableRow>
