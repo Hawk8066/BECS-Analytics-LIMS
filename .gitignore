@@ -23,6 +23,11 @@ dist/
 /minio-data/
 /storage/
 
+# Business data source files (real lab/inventory/personnel data — keep out of git)
+*.xlsx
+*.xls
+*.csv
+
 # Logs
 *.log
 npm-debug.log*
