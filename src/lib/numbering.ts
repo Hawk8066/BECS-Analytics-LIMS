@@ -28,3 +28,16 @@ export async function nextNumber({
   segments.push(String(seq.counter).padStart(pad, "0"));
   return segments.join("-");
 }
+
+/**
+ * The atomic next counter for a series, for ids whose format `nextNumber` can't
+ * express (e.g. the sample Lab ID's `LHR-YYMM-XXXX`). Same concurrency guarantee.
+ */
+export async function nextCounter(key: string): Promise<number> {
+  const seq = await prisma.sequence.upsert({
+    where: { key },
+    update: { counter: { increment: 1 } },
+    create: { key, prefix: key, counter: 1 },
+  });
+  return seq.counter;
+}

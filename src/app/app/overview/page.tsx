@@ -93,15 +93,15 @@ export default async function TestingOverviewPage() {
       by: ["status"],
       where: quoteScope,
       _count: { _all: true },
-      _sum: { subtotal: true },
+      _sum: { total: true },
     }),
     prisma.testQuotation.aggregate({
       where: { ...quoteScope, status: "ACCEPTED" },
-      _sum: { subtotal: true },
+      _sum: { total: true },
     }),
     prisma.testQuotation.aggregate({
       where: { ...quoteScope, status: { in: ["DRAFT", "SENT"] } },
-      _sum: { subtotal: true },
+      _sum: { total: true },
     }),
     prisma.sample.findMany({
       where: sampleScope,
@@ -126,7 +126,7 @@ export default async function TestingOverviewPage() {
   const quoteSums: Record<string, number> = {};
   for (const r of quoteByStatus) {
     quoteCounts[r.status] = r._count._all;
-    quoteSums[r.status] = r._sum.subtotal ?? 0;
+    quoteSums[r.status] = r._sum.total ?? 0;
   }
   const openQuotes = (quoteCounts.DRAFT ?? 0) + (quoteCounts.SENT ?? 0);
   const inProgressSamples =
@@ -184,8 +184,8 @@ export default async function TestingOverviewPage() {
         />
         <StatCard
           label="Accepted quote value"
-          value={pkr(wonValue._sum.subtotal ?? 0)}
-          hint={`${pkr(openValue._sum.subtotal ?? 0)} in pipeline`}
+          value={pkr(wonValue._sum.total ?? 0)}
+          hint={`${pkr(openValue._sum.total ?? 0)} in pipeline`}
         />
       </div>
 
@@ -346,7 +346,7 @@ export default async function TestingOverviewPage() {
                       {q.client.company}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {pkr(q.subtotal)}
+                      {pkr(q.total)}
                     </TableCell>
                     <TableCell>
                       <Badge

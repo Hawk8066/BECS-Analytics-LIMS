@@ -15,7 +15,13 @@ export const authConfig = {
       const path = nextUrl.pathname;
       const d = user?.designation;
       const home =
-        d === "CLIENT" ? "/portal" : d === "VENDOR" ? "/vendor" : "/app";
+        d === "CLIENT"
+          ? "/portal"
+          : d === "VENDOR"
+            ? "/vendor"
+            : d === "OUTSOURCE_LAB"
+              ? "/outsource"
+              : "/app";
 
       if (path.startsWith("/app")) {
         if (!user) return false; // -> login
@@ -32,6 +38,12 @@ export const authConfig = {
         if (home !== "/vendor") return Response.redirect(new URL(home, nextUrl));
         return true;
       }
+      if (path.startsWith("/outsource")) {
+        if (!user) return false;
+        if (home !== "/outsource")
+          return Response.redirect(new URL(home, nextUrl));
+        return true;
+      }
       return true;
     },
     jwt({ token, user }) {
@@ -44,6 +56,7 @@ export const authConfig = {
           sectionId: string;
           clientId: string | null;
           vendorId: string | null;
+          outsourceLabId: string | null;
         };
         token.uid = u.id;
         token.designation = u.designation;
@@ -52,6 +65,7 @@ export const authConfig = {
         token.sectionId = u.sectionId;
         token.clientId = u.clientId ?? null;
         token.vendorId = u.vendorId ?? null;
+        token.outsourceLabId = u.outsourceLabId ?? null;
       }
       return token;
     },
@@ -66,6 +80,7 @@ export const authConfig = {
           sectionId: token.sectionId,
           clientId: token.clientId ?? null,
           vendorId: token.vendorId ?? null,
+          outsourceLabId: token.outsourceLabId ?? null,
           roleKeys: [],
           canReadCrossSection: designation
             ? grantsCrossSectionRead(designation)

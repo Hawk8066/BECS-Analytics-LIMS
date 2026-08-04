@@ -8,12 +8,19 @@ export async function authenticate(
   formData: FormData,
 ): Promise<string | undefined> {
   const as = formData.get("as");
+  // Where to land after sign-in. Only same-origin absolute paths are allowed
+  // (guards against open redirects); anything else falls back to /app.
+  const cb = formData.get("callbackUrl");
+  const redirectTo =
+    typeof cb === "string" && cb.startsWith("/") && !cb.startsWith("//")
+      ? cb
+      : "/app";
   try {
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
       as: typeof as === "string" ? as : "",
-      redirectTo: "/app",
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {

@@ -7,7 +7,8 @@ export type Entrance =
   | "ryk-lab"
   | "management"
   | "client"
-  | "vendor";
+  | "vendor"
+  | "outsource";
 
 export function entranceOf(
   designation: Designation,
@@ -15,6 +16,7 @@ export function entranceOf(
 ): Entrance | null {
   if (designation === "CLIENT") return "client";
   if (designation === "VENDOR") return "vendor";
+  if (designation === "OUTSOURCE_LAB") return "outsource";
   switch (sectionType) {
     case "LAHORE_LAB":
       return "lahore-lab";
@@ -33,4 +35,5 @@ export const ENTRANCE_LABELS: Record<Entrance, string> = {
   management: "Management",
   client: "Client",
   vendor: "Vendor",
+  outsource: "Outsource Lab",
 };

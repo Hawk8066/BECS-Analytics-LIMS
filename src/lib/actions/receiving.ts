@@ -72,7 +72,7 @@ export async function issueGRN(formData: FormData): Promise<void> {
     where: { id },
     include: {
       grn: true,
-      po: { include: { pr: { include: { lines: true } } } },
+      po: { include: { lines: true, pr: { include: { lines: true } } } },
     },
   });
   if (!receipt) throw new Error("Receipt not found.");
@@ -82,6 +82,11 @@ export async function issueGRN(formData: FormData): Promise<void> {
 
   const main = await prisma.store.findFirst({ where: { type: "MAIN" } });
   if (!main) throw new Error("Main store not configured.");
+
+  // Credit only the lines this PO covers (a PR can split across vendor POs).
+  // Legacy POs have no PurchaseOrderLine rows — fall back to all PR lines.
+  const creditLines =
+    receipt.po.lines.length > 0 ? receipt.po.lines : receipt.po.pr.lines;
 
   const year = new Date().getFullYear();
   const grnNo = await nextNumber({
@@ -100,7 +105,7 @@ export async function issueGRN(formData: FormData): Promise<void> {
         issuedById: actor.id,
       },
     }),
-    ...receipt.po.pr.lines.map((l) =>
+    ...creditLines.map((l) =>
       prisma.stockTransaction.create({
         data: {
           storeId: main.id,
@@ -123,7 +128,7 @@ export async function issueGRN(formData: FormData): Promise<void> {
     action: "CREATE",
     entityType: "GRN",
     entityId: grnNo,
-    after: { lines: receipt.po.pr.lines.length },
+    after: { lines: creditLines.length },
   });
   revalidatePath(`/app/procurement/${receipt.po.prId}`);
 }

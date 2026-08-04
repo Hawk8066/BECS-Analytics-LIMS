@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canRegisterVendor } from "@/lib/auth/perms";
 import { buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import {
   Table,
   TableBody,
@@ -33,6 +34,9 @@ export default async function VendorsPage() {
           </Link>
         )}
       </div>
+
+      <ImportExcel model="Vendor" path="/app/vendors" label="vendors" />
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>

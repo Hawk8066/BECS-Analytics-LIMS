@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BookLotForm } from "./book-lot-form";
+import { BookLotButton } from "./book-lot-button";
 import { ResultForm } from "./result-form";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -155,7 +155,7 @@ function ProductPanel({
                   return (
                     <TableRow key={l.id}>
                       <TableCell className="font-mono text-xs">
-                        <Link href={`/app/production/${l.id}`} className="underline">
+                        <Link href={`/btf-qc/${l.id}`} className="underline">
                           {l.lotNo}
                         </Link>
                       </TableCell>
@@ -246,19 +246,21 @@ function ProductPanel({
       </Card>
 
       {canManage && (
-        <BookLotForm
-          productTypeId={product.id}
-          basis={product.basis}
-          isRaw={product.stage === "RAW"}
-          parentTypeName={product.parentType?.name ?? null}
-          parentLots={parentLots.map((p) => ({
-            id: p.id,
-            lotNo: p.lotNo,
-            refNo: p.refNo,
-            verdict: p.verdict,
-          }))}
-          analysts={analysts}
-        />
+        <div className="flex justify-end">
+          <BookLotButton
+            productTypeId={product.id}
+            basis={product.basis}
+            isRaw={product.stage === "RAW"}
+            parentTypeName={product.parentType?.name ?? null}
+            parentLots={parentLots.map((p) => ({
+              id: p.id,
+              lotNo: p.lotNo,
+              refNo: p.refNo,
+              verdict: p.verdict,
+            }))}
+            analysts={analysts}
+          />
+        </div>
       )}
     </div>
   );
@@ -338,13 +340,21 @@ export default async function ProductionPage() {
         </div>
         <div className="flex gap-2">
           <Link
-            href="/app/production/dashboard"
+            href="/btf-qc/dashboard"
             className={buttonVariants({ size: "sm", variant: "outline" })}
           >
             Dashboard
           </Link>
+          {canManageProductionQc(user.designation) && (
+            <Link
+              href="/btf-qc/performance"
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+            >
+              Performance
+            </Link>
+          )}
           <Link
-            href="/app/production/reports"
+            href="/btf-qc/reports"
             className={buttonVariants({ size: "sm", variant: "outline" })}
           >
             Monthly reports

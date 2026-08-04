@@ -6,6 +6,7 @@ import {
   canEvaluateCompetence,
   canGrantAuthorization,
   isAdmin,
+  isPortalUser,
 } from "@/lib/auth/perms";
 import { approveProfile } from "@/lib/actions/personnel";
 import { ProfileSection } from "./profile-section";
@@ -81,7 +82,8 @@ export default async function PersonnelDetailPage({
         orderBy: { code: "asc" },
       }),
     ]);
-  if (!person) notFound();
+  // Portal logins are clients/vendors, not personnel — no staff record to show.
+  if (!person || isPortalUser(person.designation)) notFound();
 
   const p = person.profile;
   const canApprove =

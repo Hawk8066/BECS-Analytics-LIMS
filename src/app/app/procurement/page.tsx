@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/format";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { procurementListWhere } from "@/lib/procurement/access";
-import { buttonVariants } from "@/components/ui/button";
+import { PRFormButton } from "./pr-form-button";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -27,11 +27,24 @@ export default async function ProcurementPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const prs = await prisma.purchaseRequest.findMany({
-    where: procurementListWhere(user),
-    include: { lines: { select: { id: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [prs, items] = await Promise.all([
+    prisma.purchaseRequest.findMany({
+      where: procurementListWhere(user),
+      include: { lines: { select: { id: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    // The standing item catalog to pick from when raising a PR.
+    prisma.inventoryItem.findMany({
+      where: { facilityId: user.facilityId },
+      select: { name: true, category: true, pack: true, make: true, model: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const itemOpts = items.map((it) => ({
+    name: it.name,
+    category: it.category,
+    spec: [it.pack, it.make, it.model].filter(Boolean).join(", "),
+  }));
 
   return (
     <div className="space-y-6">
@@ -40,9 +53,7 @@ export default async function ProcurementPage() {
           <h1 className="text-2xl font-semibold">Purchase Requests</h1>
           <p className="text-sm text-muted-foreground">{prs.length} in scope</p>
         </div>
-        <Link href="/app/procurement/new" className={buttonVariants()}>
-          New PR
-        </Link>
+        <PRFormButton items={itemOpts} />
       </div>
       <div className="rounded-md border">
         <Table>

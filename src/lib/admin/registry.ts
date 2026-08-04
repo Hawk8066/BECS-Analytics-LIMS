@@ -44,6 +44,12 @@ export interface AdminModel {
   fields: AdminField[];
   /** Field names shown as columns in the list view. */
   listColumns: string[];
+  /**
+   * Unique constraints as field-name tuples — single-column `@unique` and
+   * composite `@@unique` alike. Used to catch duplicates within an import file
+   * before the database rejects them.
+   */
+  uniqueKeys: string[][];
 }
 
 function scalarType(t: string): AdminFieldType {
@@ -132,12 +138,21 @@ function buildModel(m: Prisma.DMMF.Model): AdminModel {
     if (!cols.includes(f.name)) cols.push(f.name);
   }
 
+  // Unique keys: composite @@unique tuples plus every single-column @unique.
+  const uniqueKeys: string[][] = [...m.uniqueFields.map((k) => [...k])];
+  for (const f of m.fields) {
+    if (f.isUnique && !uniqueKeys.some((k) => k.length === 1 && k[0] === f.name)) {
+      uniqueKeys.push([f.name]);
+    }
+  }
+
   return {
     name: m.name,
     delegate: m.name.charAt(0).toLowerCase() + m.name.slice(1),
     idField,
     fields,
     listColumns: cols,
+    uniqueKeys,
   };
 }
 

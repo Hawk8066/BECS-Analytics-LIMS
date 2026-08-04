@@ -10,6 +10,7 @@ export interface SessionUser {
   sectionId: string;
   clientId: string | null;
   vendorId: string | null;
+  outsourceLabId: string | null;
   roleKeys: string[];
   // Senior roles (COO, OM) get cross-section/facility read (SSOT §7).
   canReadCrossSection: boolean;

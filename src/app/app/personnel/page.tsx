@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { readScope } from "@/lib/db/scope";
+import { readScope, staffOnly } from "@/lib/db/scope";
 import { canManagePersonnel } from "@/lib/auth/perms";
 import { buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -28,7 +29,8 @@ export default async function PersonnelListPage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
   const people = await prisma.user.findMany({
-    where: readScope(user),
+    // Lab personnel only — client/vendor portal logins are not staff.
+    where: { ...readScope(user), ...staffOnly },
     include: { profile: true, facility: true, section: true },
     orderBy: { createdAt: "desc" },
   });
@@ -49,6 +51,8 @@ export default async function PersonnelListPage() {
           </Link>
         )}
       </div>
+
+      <ImportExcel model="User" path="/app/personnel" label="personnel records" />
 
       <div className="rounded-md border">
         <Table>

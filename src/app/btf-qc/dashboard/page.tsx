@@ -80,19 +80,27 @@ export default async function ProductionDashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            <Link href="/app/production" className="underline">
+            <Link href="/btf-qc" className="underline">
               Production QC
             </Link>{" "}
             / Dashboard
           </p>
           <h1 className="text-2xl font-semibold">Production QC Dashboard</h1>
         </div>
-        <Link
-          href="/app/production/reports"
-          className={buttonVariants({ size: "sm", variant: "outline" })}
-        >
-          Monthly reports
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/btf-qc/performance"
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+          >
+            Performance
+          </Link>
+          <Link
+            href="/btf-qc/reports"
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+          >
+            Monthly reports
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,7 +171,7 @@ export default async function ProductionDashboardPage() {
               {recent.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="font-mono text-xs">
-                    <Link href={`/app/production/${l.id}`} className="underline">
+                    <Link href={`/btf-qc/${l.id}`} className="underline">
                       {l.lotNo}
                     </Link>
                   </TableCell>

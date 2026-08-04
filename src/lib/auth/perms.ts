@@ -11,6 +11,19 @@ export const isAdmin = (d: Designation) => d === "ADMIN";
 export const isCOO = (d: Designation) => d === "COO";
 export const isOM = (d: Designation) => d === "OPERATIONS_MANAGER";
 
+/**
+ * External portal logins. Clients and vendors are Users so they can sign in to
+ * their own portal, but they are not lab personnel — they must stay out of
+ * staff rosters (personnel, payroll, competence, and the like).
+ */
+export const PORTAL_DESIGNATIONS: readonly Designation[] = [
+  "CLIENT",
+  "VENDOR",
+  "OUTSOURCE_LAB",
+];
+export const isPortalUser = (d: Designation) =>
+  d === "CLIENT" || d === "VENDOR" || d === "OUTSOURCE_LAB";
+
 /** OM (and COO) manage personnel profile shells and functions (SSOT §5). */
 export const canManagePersonnel = (d: Designation) =>
   isAdmin(d) || d === "OPERATIONS_MANAGER" || d === "COO";
@@ -51,6 +64,22 @@ export const canApproveSample = (d: Designation) => isAdmin(d) || d === "COO";
 
 /** Vendor registration by the Accountant (SSOT §5); COO admin. */
 export const canRegisterVendor = (d: Designation) =>
+  isAdmin(d) || d === "ACCOUNTANT" || d === "COO";
+
+/** Register outsourced (subcontractor) labs: testing coordinators + LO; COO admin. */
+export const canRegisterOutsourceLab = (d: Designation) =>
+  isAdmin(d) ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "LIAISON_OFFICER" ||
+  d === "COO";
+
+/** Set what an outsource lab charges us per test: lab coordinators + finance. */
+export const canSetOutsourcePrice = (d: Designation) =>
+  canRegisterOutsourceLab(d) || d === "ACCOUNTANT";
+
+/** Record outsource-lab bills (payables): finance (Accountant / COO / admin). */
+export const canManageOutsourceBilling = (d: Designation) =>
   isAdmin(d) || d === "ACCOUNTANT" || d === "COO";
 
 /** PR verification: OM @ Lahore / Lab Manager @ RYK before COO approval (D18). */
@@ -123,6 +152,22 @@ export const canManageParameters = (d: Designation) =>
 
 /** Only the COO approves parameters (makes them available for samples). */
 export const canApproveParameter = (d: Designation) => isAdmin(d) || d === "COO";
+
+/** Manage conformity standards (acceptance limits) — same roles as parameters. */
+export const canManageStandards = (d: Designation) =>
+  isAdmin(d) ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "LIAISON_OFFICER" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "COO";
+
+/** Access the BTF Quality Control portal (anyone who books, runs, or reviews QC). */
+export const canAccessProductionQc = (d: Designation) =>
+  isAdmin(d) ||
+  d === "COO" ||
+  d === "OPERATIONS_MANAGER" ||
+  d === "LAB_MANAGER_RYK" ||
+  d === "ANALYST";
 
 /** Book/assign production-QC lots + set specs: RYK Lab Manager (OM/COO too). */
 export const canManageProductionQc = (d: Designation) =>

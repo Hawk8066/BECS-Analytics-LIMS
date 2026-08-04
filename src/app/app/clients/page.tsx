@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { canRegisterClient } from "@/lib/auth/perms";
 import { formatDate } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import {
   Table,
   TableBody,
@@ -37,6 +38,8 @@ export default async function ClientsPage() {
           </Link>
         )}
       </div>
+
+      <ImportExcel model="Client" path="/app/clients" label="clients" />
 
       <div className="overflow-x-auto rounded-md border">
         <Table>

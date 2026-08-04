@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { checkIn, checkOut } from "@/lib/actions/attendance";
 import { formatDate, formatTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -63,6 +64,8 @@ export default async function AttendancePage() {
           E-signed check-in / check-out (BR-20).
         </p>
       </div>
+
+      <ImportExcel model="Attendance" path="/app/attendance" label="attendance records" />
 
       <Card>
         <CardHeader>

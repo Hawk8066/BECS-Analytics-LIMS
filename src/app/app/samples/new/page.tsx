@@ -1,37 +1,22 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
-import { prisma } from "@/lib/db";
 import { canRegisterSample } from "@/lib/auth/perms";
+import { loadSampleFormData } from "../form-data";
 import { SampleForm } from "../sample-form";
 
-export default async function NewSamplePage() {
+export default async function NewSamplePage({
+  searchParams,
+}: {
+  /** ?quotation=<id> — arriving from "Register sample" on an accepted quote. */
+  searchParams: Promise<{ quotation?: string }>;
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canRegisterSample(user.designation)) redirect("/app/samples");
 
-  const [clients, parameters, facilities, packages] = await Promise.all([
-    prisma.client.findMany({
-      where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
-      orderBy: { company: "asc" },
-    }),
-    prisma.parameter.findMany({
-      where: { approvedAt: { not: null } },
-      include: { sectorPrices: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.facility.findMany({ orderBy: { code: "asc" } }),
-    prisma.package.findMany({
-      orderBy: { name: "asc" },
-      include: { parameters: { select: { parameterId: true } }, prices: true },
-    }),
-  ]);
-
-  const LAB_NAMES: Record<string, string> = {
-    LAHORE: "Lahore",
-    RYK: "Rahimyar Khan",
-  };
-  const labs = facilities.map((f) => ({ id: f.id, name: LAB_NAMES[f.code] ?? f.name }));
+  const { quotation: fromQuotation } = await searchParams;
+  const data = await loadSampleFormData(user);
 
   return (
     <div className="space-y-6">
@@ -41,31 +26,7 @@ export default async function NewSamplePage() {
           A coded Lab ID is assigned; the sample is blinded for testing.
         </p>
       </div>
-      <SampleForm
-        labs={labs}
-        defaultLabId={user.facilityId}
-        matrices={[
-          ...new Set(parameters.map((p) => p.matrix).filter((m): m is string => !!m)),
-        ].sort()}
-        clients={clients.map((c) => ({
-          id: c.id,
-          label: c.company,
-        }))}
-        parameters={parameters.map((p) => ({
-          id: p.id,
-          name: p.name,
-          unit: p.unit,
-          matrix: p.matrix,
-          accredited: p.accredited,
-          prices: Object.fromEntries(p.sectorPrices.map((sp) => [sp.sector, sp.price])),
-        }))}
-        packages={packages.map((pkg) => ({
-          id: pkg.id,
-          name: pkg.name,
-          parameterIds: pkg.parameters.map((x) => x.parameterId),
-          prices: Object.fromEntries(pkg.prices.map((x) => [x.sector, x.price])),
-        }))}
-      />
+      <SampleForm {...data} defaultQuotationId={fromQuotation} />
     </div>
   );
 }

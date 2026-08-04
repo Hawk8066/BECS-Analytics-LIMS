@@ -118,8 +118,8 @@ export async function bookLot(
     facilityId: product.facilityId,
   });
 
-  revalidatePath("/app/production");
-  redirect(`/app/production/${lot.id}`);
+  revalidatePath("/btf-qc");
+  redirect(`/btf-qc/${lot.id}`);
 }
 
 // Analyst submits the test result; auto-judged against the product spec and sent
@@ -171,8 +171,8 @@ export async function enterResult(
     facilityId: lot.facilityId,
   });
 
-  revalidatePath("/app/production");
-  revalidatePath(`/app/production/${lotId}`);
+  revalidatePath("/btf-qc");
+  revalidatePath(`/btf-qc/${lotId}`);
   return {};
 }
 
@@ -199,8 +199,8 @@ export async function reassignLot(formData: FormData): Promise<void> {
     after: { assignedToId },
     facilityId: lot.facilityId,
   });
-  revalidatePath("/app/production");
-  revalidatePath(`/app/production/${lotId}`);
+  revalidatePath("/btf-qc");
+  revalidatePath(`/btf-qc/${lotId}`);
 }
 
 // Approve or reject a tested lot.
@@ -232,8 +232,8 @@ export async function decideLot(formData: FormData): Promise<void> {
     facilityId: lot.facilityId,
   });
 
-  revalidatePath("/app/production");
-  revalidatePath(`/app/production/${lotId}`);
+  revalidatePath("/btf-qc");
+  revalidatePath(`/btf-qc/${lotId}`);
 }
 
 // Set a product's acceptance spec (min/max) for auto pass/fail.
@@ -262,5 +262,5 @@ export async function setProductSpec(formData: FormData): Promise<void> {
     after: { specMin: minRaw || null, specMax: maxRaw || null },
   });
 
-  revalidatePath("/app/production");
+  revalidatePath("/btf-qc");
 }

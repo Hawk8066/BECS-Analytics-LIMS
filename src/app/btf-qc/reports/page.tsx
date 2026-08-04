@@ -71,7 +71,7 @@ export default async function ProductionReportsPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            <Link href="/app/production" className="underline">
+            <Link href="/btf-qc" className="underline">
               Production QC
             </Link>{" "}
             / Monthly reports
@@ -85,7 +85,7 @@ export default async function ProductionReportsPage({
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href={`/app/production/reports?month=${prev}`}
+            href={`/btf-qc/reports?month=${prev}`}
             className={buttonVariants({ size: "sm", variant: "outline" })}
           >
             ← Prev
@@ -102,7 +102,7 @@ export default async function ProductionReportsPage({
             </button>
           </form>
           <Link
-            href={`/app/production/reports?month=${next}`}
+            href={`/btf-qc/reports?month=${next}`}
             className={buttonVariants({ size: "sm", variant: "outline" })}
           >
             Next →
@@ -140,7 +140,7 @@ export default async function ProductionReportsPage({
                     {rows.map((l) => (
                       <TableRow key={l.id}>
                         <TableCell className="font-mono text-xs">
-                          <Link href={`/app/production/${l.id}`} className="underline">
+                          <Link href={`/btf-qc/${l.id}`} className="underline">
                             {l.lotNo}
                           </Link>
                         </TableCell>

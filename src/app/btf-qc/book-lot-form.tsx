@@ -44,13 +44,13 @@ export function BookLotForm({
   const toggle = (id: string) =>
     setPicked((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
   return (
-    <form action={formAction} className="grid gap-4 rounded-md border p-4">
-      <p className="text-sm font-medium">Book a new lot</p>
+    <form action={formAction} className="grid gap-4">
       <input type="hidden" name="productTypeId" value={productTypeId} />
 
       <div className="grid gap-4 sm:grid-cols-2">

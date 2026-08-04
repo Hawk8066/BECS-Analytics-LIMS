@@ -7,6 +7,7 @@ import { isLabOnly } from "@/lib/inventory";
 import { decideIssue, requestIssue } from "@/lib/actions/receiving";
 import { setStockStatus } from "@/lib/actions/inventory";
 import { Button } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, type TabItem } from "@/components/ui/tabs";
 import {
@@ -555,6 +556,8 @@ export default async function InventoryPage() {
           request (BR-10/11).
         </p>
       </div>
+
+      <ImportExcel model="InventoryItem" path="/app/inventory" label="inventory items" />
 
       <Tabs tabs={tabs} />
     </div>

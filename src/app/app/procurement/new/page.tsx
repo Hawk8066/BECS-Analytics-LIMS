@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { ItemCategory } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
@@ -11,11 +10,23 @@ export default async function NewPRPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const profile = await prisma.personnelProfile.findUnique({
-    where: { userId: user.id },
-    select: { fullName: true },
-  });
+  const [profile, items] = await Promise.all([
+    prisma.personnelProfile.findUnique({
+      where: { userId: user.id },
+      select: { fullName: true },
+    }),
+    prisma.inventoryItem.findMany({
+      where: { facilityId: user.facilityId },
+      select: { name: true, category: true, pack: true, make: true, model: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   const requesterName = profile?.fullName ?? user.email;
+  const itemOpts = items.map((it) => ({
+    name: it.name,
+    category: it.category,
+    spec: [it.pack, it.make, it.model].filter(Boolean).join(", "),
+  }));
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -50,7 +61,7 @@ export default async function NewPRPage() {
         </div>
       </div>
 
-      <PRForm categories={Object.values(ItemCategory)} />
+      <PRForm items={itemOpts} />
     </div>
   );
 }

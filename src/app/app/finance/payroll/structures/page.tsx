@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canManagePayroll } from "@/lib/auth/perms";
+import { staffOnly } from "@/lib/db/scope";
 import { setSalaryStructure } from "@/lib/actions/payroll";
 import { Button } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import {
   Card,
   CardContent,
@@ -33,6 +35,8 @@ export default async function SalaryStructuresPage() {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
+      // Salaries are for staff; portal logins are clients/vendors, not employees.
+      ...staffOnly,
       ...(user.canReadCrossSection ? {} : { facilityId: user.facilityId }),
     },
     include: { profile: { select: { fullName: true } } },
@@ -47,6 +51,12 @@ export default async function SalaryStructuresPage() {
         <h1 className="text-2xl font-semibold">Salary structures</h1>
         <p className="text-sm text-muted-foreground">Amounts in PKR.</p>
       </div>
+
+      <ImportExcel
+        model="SalaryStructure"
+        path="/app/finance/payroll/structures"
+        label="salary structures"
+      />
 
       {users.map((u) => {
         const s = byUser.get(u.id);

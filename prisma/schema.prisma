@@ -37,6 +37,7 @@ enum Designation {
   ADMIN // application super-admin: full view/edit/delete across all modules + audit
   CLIENT // external client portal login (see own details/samples/reports only)
   VENDOR // external vendor portal login (see own POs/quotations only)
+  OUTSOURCE_LAB // external lab portal login (enter results for parameters outsourced to them)
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
@@ -258,11 +259,13 @@ model User {
   manager   User?   @relation("UserManager", fields: [managerId], references: [id])
   reports   User[]  @relation("UserManager")
 
-  // External portal logins: link this account to a Client / Vendor.
+  // External portal logins: link this account to a Client / Vendor / Outsource lab.
   clientId String?
   client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
   vendorId String?
   vendor   Vendor? @relation("VendorPortalUser", fields: [vendorId], references: [id])
+  outsourceLabId String?
+  outsourceLab   OutsourceLab? @relation("OutsourceLabRep", fields: [outsourceLabId], references: [id])
 
   profile        PersonnelProfile?
   roles          UserRole[]
@@ -279,6 +282,8 @@ model User {
   leaveDecisions    LeaveApplication[] @relation("LeaveApprover")
   undertakings      ImpartialityUndertaking[]
   qcLotsAssigned    QcLot[]            @relation("QcLotAnalyst")
+  priceChanges      ParameterPriceHistory[]
+  pkgPriceChanges   PackagePriceHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -288,6 +293,7 @@ model User {
   @@index([managerId])
   @@index([clientId])
   @@index([vendorId])
+  @@index([outsourceLabId])
 }
 
 // Full HR profile (Module 01). OM enters the shell fields on User; the user
@@ -680,6 +686,35 @@ model Client {
   @@index([facilityId])
 }
 
+// External laboratory that runs subcontracted (outsourced) tests. Registered
+// like a Client/Vendor with a portal login: its representative signs in to
+// enter results for the parameters outsourced to it (blinded — sees the coded
+// Lab ID + parameter only, never the client).
+model OutsourceLab {
+  id            String   @id @default(uuid())
+  labNo         String   @unique
+  name          String
+  addressLine1  String?
+  addressLine2  String?
+  addressLine3  String?
+  city          String?
+  province      String?
+  country       String?
+  contactPerson String? // focal person
+  contactNumber String?
+  email         String? // representative portal login
+  facilityId    String // owning facility
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  portalUsers      User[]            @relation("OutsourceLabRep")
+  sampleParameters SampleParameter[]
+  labPrices        OutsourceLabPrice[]
+  bills            OutsourceBill[]
+
+  @@index([facilityId])
+}
+
 // Client-facing quotation for testing services (priced from sector prices &
 // packages). Items are snapshotted so the quote is immutable once created.
 model TestQuotation {
@@ -688,14 +723,31 @@ model TestQuotation {
   clientId    String
   client      Client              @relation(fields: [clientId], references: [id])
   sector      String?
+  // What is being quoted and how many samples of it; the total is the per-sample
+  // cost times the quantity.
+  sampleType  String?
+  sampleQty   Int                 @default(1)
+  // Which rate card the quote was priced from (SSOT: samples carry the same).
+  priority    PricePriority       @default(NORMAL)
+  // Services sales tax, whole percent, added on top of the net; `total` is the
+  // tax-inclusive amount.
+  taxPct      Int                 @default(0)
   status      String              @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED
   validUntil  DateTime?
-  subtotal    Int                 @default(0) // PKR paisa
+  subtotal    Int                 @default(0) // PKR paisa — gross, sum of items
+  // Quote-level discount. Kind NONE | PERCENT | AMOUNT; value is a whole percent
+  // for PERCENT and paisa for AMOUNT. `total` is the net payable (subtotal less
+  // the discount) snapshotted at creation, so the quote stays immutable.
+  discountKind  String            @default("NONE")
+  discountValue Int               @default(0)
+  total         Int               @default(0) // PKR paisa — net payable
   note        String?
   createdById String?
   createdAt   DateTime            @default(now())
 
-  items TestQuotationItem[]
+  items    TestQuotationItem[]
+  samples  Sample[]
+  invoices Invoice[]
 
   @@index([clientId])
 }
@@ -707,7 +759,8 @@ model TestQuotationItem {
   kind        String // PARAMETER | PACKAGE
   refId       String?
   name        String
-  price       Int // PKR paisa
+  price       Int // PKR paisa — before discount
+  discount    Int  @default(0) // PKR paisa — per-line discount
 
   @@index([quotationId])
 }
@@ -723,41 +776,127 @@ model Parameter {
   lod         String? // Limit of Detection
   loq         String? // Limit of Quantification
   accredited  Boolean   @default(false)
-  price       Int? // PKR paisa
+  price       Int? // PKR paisa — normal priority
+  urgentPrice Int? // PKR paisa — urgent priority (falls back to price when unset)
+  // Turnaround time in working days, per priority. What the client is promised.
+  tatDays       Int?
+  tatUrgentDays Int?
   createdById String? // proposer (OM / LO / Lab Manager)
   approvedAt  DateTime? // COO approval to make the parameter available
   createdAt   DateTime  @default(now())
 
-  sampleParameters SampleParameter[]
-  sectorPrices     ParameterSectorPrice[]
-  packageLinks     PackageParameter[]
+  sampleParameters   SampleParameter[]
+  sectorPrices       ParameterSectorPrice[]
+  outsourceLabPrices OutsourceLabPrice[]
+  priceHistory       ParameterPriceHistory[]
+  packageLinks       PackageParameter[]
+  standardLimits     StandardLimit[]
 
   // A parameter is unique per (name, matrix) — the same test can exist for
   // different matrices with its own method/unit.
   @@unique([name, matrix])
 }
 
-// Per-sector price for a parameter (PKR paisa). Pricing is sector-based.
+// A published standard/specification a client can have a sample conformed
+// against. Same product can be conformed on different standards, so each is a
+// named set of per-parameter acceptance limits.
+model Standard {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  matrix      String? // filing label (e.g. Fertilizer - Solid)
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  limits  StandardLimit[]
+  samples Sample[]
+}
+
+// One parameter's acceptance limit within a standard. Nullable min/max encode
+// the kind: max only = "≤", min only = "≥", both = "between", neither = none.
+model StandardLimit {
+  id          String    @id @default(uuid())
+  standardId  String
+  standard    Standard  @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  parameterId String
+  parameter   Parameter @relation(fields: [parameterId], references: [id])
+  min         Float? // ≥ bound (greater-than / between lower)
+  max         Float? // ≤ bound (less-than / between upper)
+  unit        String? // display unit (defaults to the parameter's)
+
+  @@unique([standardId, parameterId])
+  @@index([parameterId])
+}
+
+// Per-sector price for a parameter (PKR paisa). Pricing is sector-based, and
+// each sector carries a normal and an urgent rate; the row exists while either
+// is set. An unset urgent price means urgent work is charged the normal rate.
 model ParameterSectorPrice {
   id          String    @id @default(uuid())
   parameterId String
   parameter   Parameter @relation(fields: [parameterId], references: [id], onDelete: Cascade)
   sector      String
-  price       Int // paisa
+  price       Int? // paisa — normal priority
+  urgentPrice Int? // paisa — urgent priority
   updatedAt   DateTime  @updatedAt
 
   @@unique([parameterId, sector])
   @@index([parameterId])
 }
 
+// Prices (and turnaround times) come in two grades: standard work and rush work.
+enum PricePriority {
+  NORMAL
+  URGENT
+}
+
+// How a price came to be set — a manual entry and an uploaded workbook are
+// traced differently when a figure is later questioned.
+enum PriceChangeSource {
+  MANUAL // typed into the Prices tab
+  IMPORT // arrived on an uploaded workbook
+  BACKFILL // recorded after the fact, for prices set before this log existed
+  CORRECTION // put right by a maintenance script; no operator on record
+}
+
+// Dated trail of every parameter price change, so a price can always be traced
+// to the day it was set and to whoever set it. Append-only, like AuditLog: the
+// current price lives on ParameterSectorPrice, the story of it lives here.
+model ParameterPriceHistory {
+  id          String            @id @default(uuid())
+  parameterId String
+  parameter   Parameter         @relation(fields: [parameterId], references: [id], onDelete: Cascade)
+  // Legacy: pricing was once per-sector. Now null — a parameter has one price.
+  sector      String?
+  priority    PricePriority     @default(NORMAL)
+  oldPrice    Int? // paisa; null when the sector had no price before
+  price       Int? // paisa; null when the price was cleared
+  source      PriceChangeSource @default(MANUAL)
+  changedById String?
+  changedBy   User?             @relation(fields: [changedById], references: [id])
+  changedAt   DateTime          @default(now())
+
+  @@index([parameterId, sector, changedAt])
+  @@index([changedAt])
+}
+
 // A named bundle of parameters offered as a package; priced per sector.
 model Package {
   id          String               @id @default(uuid())
   name        String               @unique
+  // The matrix (sample type) this package is filed under, e.g. "Fertilizer -
+  // Solid". Optional; a package may span matrices.
+  matrix      String?
+  // A package is priced as one bundle (not per sector). Normal + urgent grades;
+  // urgent falls back to normal +50% when unset, same rule as parameters.
+  price       Int? // PKR paisa — normal priority
+  urgentPrice Int? // PKR paisa — urgent priority
   createdById String?
   createdAt   DateTime             @default(now())
   parameters  PackageParameter[]
-  prices      PackageSectorPrice[]
+  prices      PackageSectorPrice[] // legacy, no longer used for pricing
+
+  priceHistory PackagePriceHistory[]
 }
 
 model PackageParameter {
@@ -771,14 +910,33 @@ model PackageParameter {
 }
 
 model PackageSectorPrice {
-  id        String   @id @default(uuid())
-  packageId String
-  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  sector    String
-  price     Int // paisa
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  packageId   String
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  sector      String
+  price       Int? // paisa — normal priority
+  urgentPrice Int? // paisa — urgent priority
+  updatedAt   DateTime @updatedAt
 
   @@unique([packageId, sector])
+}
+
+// Dated trail of package price changes — the ParameterPriceHistory of packages.
+model PackagePriceHistory {
+  id          String            @id @default(uuid())
+  packageId   String
+  package     Package           @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  sector      String?
+  priority    PricePriority     @default(NORMAL)
+  oldPrice    Int? // paisa; null when the sector had no price before
+  price       Int? // paisa; null when the price was cleared
+  source      PriceChangeSource @default(MANUAL)
+  changedById String?
+  changedBy   User?             @relation(fields: [changedById], references: [id])
+  changedAt   DateTime          @default(now())
+
+  @@index([packageId, sector, changedAt])
+  @@index([changedAt])
 }
 
 model TestMethod {
@@ -800,14 +958,26 @@ model Sample {
   client          Client       @relation(fields: [clientId], references: [id])
   sampleType      String
   clientSampleRef String? // client-supplied sample id (not identity-revealing)
+  quantity        String? // received amount as printed on the report, e.g. "800 g"
+  physicalCondition String? // e.g. "Solid granules", "Liquid" — shown on the report
   priority        String?
   instructions    String?
   thirdPartyName  String? // report issued in the name of a third party
   status          SampleStatus @default(REGISTERED)
+  // The accepted quotation this sample was booked against, when there is one:
+  // walk-in samples have none, quoted work is traceable back to what was agreed.
+  quotationId     String?
+  quotation       TestQuotation? @relation(fields: [quotationId], references: [id])
+  // Optional standard the client asked this sample to be conformed against; each
+  // result's limit is snapshotted onto its SampleParameter at registration.
+  standardId      String?
+  standard        Standard?    @relation(fields: [standardId], references: [id])
   facilityId      String
   sectionId       String
   registeredById  String?
-  assignedToId    String? // analyst assigned by OM / Lab Manager (RYK)
+  // Deprecated: analyst assignment is now per-parameter (SampleParameter.assignedToId).
+  // Kept nullable for historical rows; no longer read by the testing workflow.
+  assignedToId    String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -818,6 +988,8 @@ model Sample {
   @@index([facilityId])
   @@index([sectionId])
   @@index([status])
+  @@index([quotationId])
+  @@index([standardId])
 }
 
 // A test line item on a sample (sample × parameter). Result entry + raw-data
@@ -829,19 +1001,43 @@ model SampleParameter {
   parameterId         String
   parameter           Parameter   @relation(fields: [parameterId], references: [id])
   unit                String? // unit chosen for this sample (may differ from the parameter default)
+  // Analyst assigned to run this specific test — assignment is per-parameter, so
+  // one sample's parameters can be split across several analysts (D-testing).
+  // Mutually exclusive with outsourceLabId: a parameter is run in-house by an
+  // analyst OR subcontracted to an external lab, never both.
+  assignedToId        String?
+  outsourceLabId      String?
+  outsourceLab        OutsourceLab? @relation(fields: [outsourceLabId], references: [id])
+  // The payable bill this outsourced test was billed on. Locks the test: it
+  // can't be re-billed or reassigned once set.
+  outsourceBillId     String?
+  outsourceBill       OutsourceBill? @relation(fields: [outsourceBillId], references: [id])
   testMethodId        String?
   testMethod          TestMethod? @relation(fields: [testMethodId], references: [id])
   resultValue         String?
   calculations        String?
+  // Conformity: the acceptance limit snapshotted from the sample's standard at
+  // registration (nullable min/max = ≥ / ≤ / between / none), and the verdict
+  // computed when the result is entered (CONFORM | NON_CONFORM | null).
+  limitMin            Float?
+  limitMax            Float?
+  conformity          String?
   // Result entered on an instrument with lapsed calibration (allowed but
   // flagged, BR-17). The uploaded raw-data photo is the legal raw record.
   outOfCalibration    Boolean     @default(false)
+  // Raw-data reference: the physical lab register + page where the result is
+  // recorded (in-house analysts). Outsourced results attach a report instead.
+  registerNo          String?
+  pageNo              String?
   rawDataAttachmentId String?
   enteredById         String?
   enteredAt           DateTime?
   createdAt           DateTime    @default(now())
 
   @@index([sampleId])
+  @@index([assignedToId])
+  @@index([outsourceLabId])
+  @@index([outsourceBillId])
 }
 
 // Final report — created on COO approval. Hash-sealed snapshot + QR (SSOT §11,
@@ -903,36 +1099,61 @@ model PurchaseRequest {
 
   lines      PRLine[]
   quotations Quotation[]
-  po         PurchaseOrder?
+  pos        PurchaseOrder[]
 
   @@index([facilityId])
   @@index([sectionId])
   @@index([status])
 }
 
-// Vendor quotation against a PR (full-path scope). The COO selects one; the PO
-// is generated from it (SSOT §10). Amounts in PKR paisa.
+// Vendor quotation against a PR (full-path scope). Rates are captured per PR line
+// (QuotationLine) so the Comparative Statement (Form 6-B) can be produced; the COO
+// awards a winning vendor per line. `amount` = Σ(rate × qty) over quoted lines;
+// `selected` = this vendor won ≥ 1 line. Amounts in PKR paisa (SSOT §10).
 model Quotation {
   id          String          @id @default(uuid())
   prId        String
   pr          PurchaseRequest @relation(fields: [prId], references: [id])
   vendorId    String
   vendor      Vendor          @relation(fields: [vendorId], references: [id])
-  amount      Int // PKR paisa
+  amount      Int // PKR paisa (Σ line rate × qty)
   note        String?
   selected    Boolean         @default(false)
   createdById String?
   createdAt   DateTime        @default(now())
 
+  lines QuotationLine[]
+
+  @@unique([prId, vendorId])
   @@index([prId])
 }
 
-// Purchase Order — one per PR. Generated from the selected quotation (full) or
-// directly after COO approval for simplified-only PRs (BR-9).
+// A vendor's offered specification + unit rate for one PR line — the cells of the
+// Comparative Statement (Form 6-B). `selected` marks the winning vendor for that
+// line (per-item award; a PR can split across several vendors). Rate in PKR paisa.
+model QuotationLine {
+  id            String    @id @default(uuid())
+  quotationId   String
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  prLineId      String
+  prLine        PRLine    @relation(fields: [prLineId], references: [id])
+  specification String?
+  rate          Int // PKR paisa, per unit
+  selected      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@unique([quotationId, prLineId])
+  @@index([prLineId])
+}
+
+// Purchase Order. A comparative can award different lines to different vendors, so
+// one PR yields one PO per winning vendor — each PO carries only the lines that
+// vendor won (PurchaseOrderLine). Simplified-only PRs generate one direct PO
+// covering all lines after COO approval (BR-9).
 model PurchaseOrder {
   id         String          @id @default(uuid())
   poNo       String          @unique
-  prId       String          @unique
+  prId       String
   pr         PurchaseRequest @relation(fields: [prId], references: [id])
   vendorId   String?
   vendor     Vendor?         @relation(fields: [vendorId], references: [id])
@@ -941,7 +1162,26 @@ model PurchaseOrder {
   issuedById String?
   createdAt  DateTime        @default(now())
 
+  lines    PurchaseOrderLine[]
   receipts GoodsReceipt[]
+
+  @@index([prId])
+}
+
+// The PR lines a PO covers (snapshot of description/qty/awarded rate) — drives
+// GRN stock crediting and payables. Rate is null for simplified direct POs.
+model PurchaseOrderLine {
+  id          String        @id @default(uuid())
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  prLineId    String
+  prLine      PRLine        @relation(fields: [prLineId], references: [id])
+  description String
+  quantity    Int
+  unit        String?
+  rate        Int? // PKR paisa, per unit (null when no per-line rate)
+
+  @@index([poId])
 }
 
 // A store: one MAIN (Lahore) + SUB stores. New goods enter the main store via
@@ -1155,7 +1395,17 @@ model Invoice {
   invoiceNo      String        @unique
   clientId       String
   client         Client        @relation(fields: [clientId], references: [id])
-  amount         Int // paisa
+  // The accepted quotation this invoice bills, when raised from one (testing
+  // work). Ad-hoc invoices have none.
+  quotationId    String?
+  quotation      TestQuotation? @relation(fields: [quotationId], references: [id])
+  // subtotal is the gross of line prices; amount is the net after per-line
+  // discounts and the invoice-level total discount (PERCENT/AMOUNT/NONE).
+  subtotal       Int           @default(0) // paisa
+  discountKind   String        @default("NONE")
+  discountValue  Int           @default(0)
+  taxPct         Int           @default(0) // services sales tax, whole percent
+  amount         Int // paisa — net payable, tax-inclusive
   status         InvoiceStatus @default(ISSUED)
   memo           String?
   issuedById     String?
@@ -1163,10 +1413,27 @@ model Invoice {
   facilityId     String
   createdAt      DateTime      @default(now())
 
+  items    InvoiceItem[]
   payments Payment[]
 
   @@index([clientId])
   @@index([facilityId])
+  @@index([quotationId])
+}
+
+// A billed line on an invoice, snapshotted from the quotation at issue time so
+// the invoice is immutable. `discount` is the per-line reduction in paisa.
+model InvoiceItem {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  kind      String // PARAMETER | PACKAGE
+  refId     String?
+  name      String
+  price     Int // paisa — before discount
+  discount  Int     @default(0) // paisa — per-line
+
+  @@index([invoiceId])
 }
 
 model Payment {
@@ -1180,6 +1447,80 @@ model Payment {
   createdAt      DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+// ----------------------------------------------------------------------------
+// Outsource-lab billing (accounts payable): what we owe external labs for the
+// tests we subcontract to them. Mirrors the client Invoice/Payment (AR) flow,
+// inverted — the lab invoices us and we pay it.
+// ----------------------------------------------------------------------------
+
+// A lab's price for one test — what the lab charges us (different from the price
+// we charge clients). One row per (lab, parameter).
+model OutsourceLabPrice {
+  id             String       @id @default(uuid())
+  outsourceLabId String
+  outsourceLab   OutsourceLab @relation(fields: [outsourceLabId], references: [id], onDelete: Cascade)
+  parameterId    String
+  parameter      Parameter    @relation(fields: [parameterId], references: [id])
+  price          Int? // PKR paisa — the lab's charge per test
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([outsourceLabId, parameterId])
+  @@index([outsourceLabId])
+}
+
+// A payable bill recorded from an outsource lab's invoice. Line items are
+// snapshotted so the bill is immutable once created.
+model OutsourceBill {
+  id             String        @id @default(uuid())
+  billNo         String        @unique
+  outsourceLabId String
+  outsourceLab   OutsourceLab  @relation(fields: [outsourceLabId], references: [id])
+  labInvoiceNo   String? // the lab's own invoice number
+  subtotal       Int           @default(0) // paisa — net (sum of line prices)
+  taxPct         Int           @default(0) // input sales tax, whole percent
+  amount         Int // paisa — gross payable (net + tax)
+  status         InvoiceStatus @default(ISSUED)
+  journalEntryId String?
+  facilityId     String
+  createdById    String?
+  createdAt      DateTime      @default(now())
+
+  items            OutsourceBillItem[]
+  payments         OutsourcePayment[]
+  billedParameters SampleParameter[]
+
+  @@index([outsourceLabId])
+  @@index([facilityId])
+}
+
+// A billed test line on an outsource bill (snapshot). `sampleParameterId` is a
+// loose reference back to the test that was billed.
+model OutsourceBillItem {
+  id                String        @id @default(uuid())
+  billId            String
+  bill              OutsourceBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  sampleParameterId String?
+  name              String // parameter name snapshot
+  sampleLabId       String // coded Sample.labId snapshot
+  price             Int // paisa
+
+  @@index([billId])
+}
+
+// A payment made to an outsource lab against a bill.
+model OutsourcePayment {
+  id             String        @id @default(uuid())
+  billId         String
+  bill           OutsourceBill @relation(fields: [billId], references: [id])
+  amount         Int // paisa
+  method         String?
+  paidById       String?
+  journalEntryId String?
+  createdAt      DateTime      @default(now())
+
+  @@index([billId])
 }
 
 // Versioned salary structure (one current per user). Amounts in PKR paisa;
@@ -1275,6 +1616,10 @@ model PRLine {
   unit          String?
   justification String? // why the item is needed
   priority      String? // Low | Normal | High | Urgent
+  selectionNote String? // Comparative award justification (why this vendor for this line)
+
+  quotationLines QuotationLine[]
+  poLines        PurchaseOrderLine[]
 
   @@index([prId])
 }

@@ -20,6 +20,7 @@ const PORTAL_LABELS: Record<string, string> = {
   "ryk-lab": "RYK Lab",
   client: "Client",
   vendor: "Vendor",
+  outsource: "Outsource Lab",
   management: "Management",
 };
 
@@ -27,8 +28,15 @@ function LoginInner() {
   const [error, formAction, pending] = useActionState(authenticate, undefined);
   const params = useSearchParams();
   const as = params.get("as") ?? "";
-  const label = PORTAL_LABELS[as];
-  const isPortal = as === "client" || as === "vendor";
+  const callbackUrl = params.get("callbackUrl") ?? "";
+  // The BTF QC portal signs in via callbackUrl (no entrance), so title from it.
+  const label =
+    callbackUrl === "/btf-qc" ? "BTF Quality Control" : PORTAL_LABELS[as];
+  const isPortal =
+    as === "client" ||
+    as === "vendor" ||
+    as === "outsource" ||
+    callbackUrl === "/btf-qc";
 
   return (
     <Card className="w-full max-w-sm">
@@ -45,6 +53,7 @@ function LoginInner() {
       <CardContent>
         <form action={formAction} className="grid gap-4">
           <input type="hidden" name="as" value={as} />
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input

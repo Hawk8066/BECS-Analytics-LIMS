@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { canApproveFunction, canManageFunctions } from "@/lib/auth/perms";
 import { approveFunction } from "@/lib/actions/functions";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -38,6 +39,8 @@ export default async function FunctionsPage() {
           </Link>
         )}
       </div>
+
+      <ImportExcel model="Function" path="/app/functions" label="functions" />
 
       <div className="overflow-x-auto rounded-md border">
         <Table>

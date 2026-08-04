@@ -50,3 +50,7 @@ coverage/
 .claude/
 .claude-plugin/
 .github/
+
+# Local tooling artifacts (not project code)
+.claude-ease/
+*.vsix

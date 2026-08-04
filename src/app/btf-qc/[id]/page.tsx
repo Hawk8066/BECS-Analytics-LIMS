@@ -68,7 +68,7 @@ function TreeRow({ node, level }: { node: TreeNode; level: number }) {
         style={{ marginLeft: level * 16, paddingLeft: 12 }}
       >
         <span className="text-xs text-muted-foreground">{node.productName}</span>
-        <Link href={`/app/production/${node.id}`} className="font-medium underline">
+        <Link href={`/btf-qc/${node.id}`} className="font-medium underline">
           {node.refNo}
         </Link>
         <span className="font-mono text-xs text-muted-foreground">{node.lotNo}</span>
@@ -168,7 +168,7 @@ export default async function LotDetailPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            <Link href="/app/production" className="underline">
+            <Link href="/btf-qc" className="underline">
               Production QC
             </Link>{" "}
             / {lot.productType.name}
@@ -311,7 +311,7 @@ export default async function LotDetailPage({
                 <span className="text-xs text-muted-foreground">
                   {c.child.productType.name}
                 </span>
-                <Link href={`/app/production/${c.child.id}`} className="font-medium underline">
+                <Link href={`/btf-qc/${c.child.id}`} className="font-medium underline">
                   {c.child.refNo}
                 </Link>
                 <span className="font-mono text-xs text-muted-foreground">

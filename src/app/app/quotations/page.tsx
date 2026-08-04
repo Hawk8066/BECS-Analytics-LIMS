@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canManageQuotations } from "@/lib/auth/perms";
+import { loadQuotationFormData } from "./form-data";
+import { NewQuotationButton } from "./new-quotation-button";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -31,10 +32,13 @@ export default async function QuotationsPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
+  const canManage = canManageQuotations(user.designation);
   const quotations = await prisma.testQuotation.findMany({
     include: { client: { select: { company: true } }, _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
+  // Only load the form's data when the New-quotation button will actually show.
+  const formData = canManage ? await loadQuotationFormData(user) : null;
 
   return (
     <div className="space-y-6">
@@ -45,11 +49,7 @@ export default async function QuotationsPage() {
             Client quotations for testing (priced from sector prices &amp; packages).
           </p>
         </div>
-        {canManageQuotations(user.designation) && (
-          <Link href="/app/quotations/new" className={buttonVariants()}>
-            New quotation
-          </Link>
-        )}
+        {canManage && formData && <NewQuotationButton {...formData} />}
       </div>
 
       <div className="overflow-x-auto rounded-md border">
@@ -76,7 +76,7 @@ export default async function QuotationsPage() {
                 <TableCell>{q.client.company}</TableCell>
                 <TableCell className="text-muted-foreground">{q.sector ?? "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{q._count.items}</TableCell>
-                <TableCell className="text-right">{pkr(q.subtotal)}</TableCell>
+                <TableCell className="text-right">{pkr(q.total)}</TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[q.status] ?? "outline"}>{q.status}</Badge>
                 </TableCell>

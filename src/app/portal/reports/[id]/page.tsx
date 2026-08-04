@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
+import { limitText } from "@/lib/conformity";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -27,7 +29,10 @@ export default async function PortalReportPage({
     where: { id },
     include: {
       sample: {
-        include: { parameters: { include: { parameter: true } } },
+        include: {
+          parameters: { include: { parameter: true } },
+          standard: { select: { name: true } },
+        },
       },
     },
   });
@@ -35,6 +40,11 @@ export default async function PortalReportPage({
   if (!report || report.sample.clientId !== user.clientId) notFound();
 
   const s = report.sample;
+  // On-request conformity: judged against a chosen standard.
+  const conformed = !!s.standardId;
+  const judged = s.parameters.filter((p) => p.conformity != null);
+  const overallConforms =
+    conformed && judged.length > 0 && judged.every((p) => p.conformity === "CONFORM");
 
   return (
     <div className="space-y-6">
@@ -61,12 +71,23 @@ export default async function PortalReportPage({
             <span className="text-muted-foreground">Sample type</span>
             <span>{s.sampleType}</span>
           </div>
+          {conformed && s.standard && (
+            <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
+              <span className="text-muted-foreground">Conformed to</span>
+              <span>{s.standard.name}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Results</CardTitle>
+          {conformed && (
+            <Badge variant={overallConforms ? "default" : "destructive"}>
+              {overallConforms ? "PASS" : "FAIL"}
+            </Badge>
+          )}
         </CardHeader>
         <CardContent>
           <Table>
@@ -75,6 +96,8 @@ export default async function PortalReportPage({
                 <TableHead>Parameter</TableHead>
                 <TableHead>Result</TableHead>
                 <TableHead>Unit</TableHead>
+                {conformed && <TableHead>Limit</TableHead>}
+                {conformed && <TableHead>Conformity</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -85,6 +108,22 @@ export default async function PortalReportPage({
                   <TableCell className="text-muted-foreground">
                     {sp.unit ?? sp.parameter.unit ?? "—"}
                   </TableCell>
+                  {conformed && (
+                    <TableCell className="text-muted-foreground">
+                      {limitText(sp.limitMin, sp.limitMax, sp.unit ?? sp.parameter.unit) || "—"}
+                    </TableCell>
+                  )}
+                  {conformed && (
+                    <TableCell>
+                      {sp.conformity === "CONFORM" ? (
+                        <Badge>PASS</Badge>
+                      ) : sp.conformity === "NON_CONFORM" ? (
+                        <Badge variant="destructive">FAIL</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

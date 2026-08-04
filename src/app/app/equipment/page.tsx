@@ -6,6 +6,7 @@ import { readScope } from "@/lib/db/scope";
 import { canManageEquipment } from "@/lib/auth/perms";
 import { calStatus } from "@/lib/equipment/calibration";
 import { buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -46,6 +47,9 @@ export default async function EquipmentPage() {
           </Link>
         )}
       </div>
+
+      <ImportExcel model="Equipment" path="/app/equipment" label="equipment" />
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>

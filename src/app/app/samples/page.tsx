@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canRegisterSample } from "@/lib/auth/perms";
+import { canRegisterSample, canCoordinateTesting } from "@/lib/auth/perms";
 import { canSeeClientIdentity } from "@/lib/samples/blinding";
 import { sampleListWhere } from "@/lib/samples/access";
+import { loadSampleFormData } from "./form-data";
+import { RegisterSampleButton } from "./register-sample-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,6 +33,7 @@ export default async function SamplesPage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
   const seeClient = canSeeClientIdentity(user.designation);
+  const canRegister = canRegisterSample(user.designation);
 
   // Blinding (ADR-0002): client data is only queried for roles allowed to see it.
   const samples = await prisma.sample.findMany({
@@ -38,6 +41,9 @@ export default async function SamplesPage() {
     include: { parameters: { select: { id: true } } },
     orderBy: { createdAt: "desc" },
   });
+
+  // Only load the register form's data when the button will actually be shown.
+  const formData = canRegister ? await loadSampleFormData(user) : null;
 
   const clientMap = new Map<string, string>();
   if (seeClient && samples.length > 0) {
@@ -58,11 +64,17 @@ export default async function SamplesPage() {
             {seeClient ? "" : " · client identity blinded"}
           </p>
         </div>
-        {canRegisterSample(user.designation) && (
-          <Link href="/app/samples/new" className={buttonVariants()}>
-            Register sample
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canCoordinateTesting(user.designation) && (
+            <Link
+              href="/app/samples/performance"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              Performance
+            </Link>
+          )}
+          {canRegister && formData && <RegisterSampleButton {...formData} />}
+        </div>
       </div>
 
       <div className="rounded-md border">

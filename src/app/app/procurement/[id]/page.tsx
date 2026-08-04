@@ -19,17 +19,15 @@ import {
   rejectPR,
   verifyPR,
 } from "@/lib/actions/purchase-requests";
-import {
-  addQuotation,
-  generatePO,
-  selectQuotation,
-} from "@/lib/actions/procurement";
+import { generatePO } from "@/lib/actions/procurement";
 import { canAccessPR } from "@/lib/procurement/access";
 import {
   inspectReceipt,
   issueGRN,
   markReceived,
 } from "@/lib/actions/receiving";
+import { AddQuotationButton } from "./add-quotation-button";
+import { Comparative } from "./comparative";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,12 +59,17 @@ export default async function PRDetailPage({
     where: { id },
     include: {
       lines: true,
-      quotations: { include: { vendor: true }, orderBy: { amount: "asc" } },
-      po: {
+      quotations: {
+        include: { vendor: true, lines: true },
+        orderBy: { createdAt: "asc" },
+      },
+      pos: {
         include: {
           vendor: true,
+          lines: true,
           receipts: { include: { grn: true }, orderBy: { receivedAt: "asc" } },
         },
+        orderBy: { createdAt: "asc" },
       },
     },
   });
@@ -88,8 +91,26 @@ export default async function PRDetailPage({
   const pkr = (paisa: number | null | undefined) =>
     paisa == null ? "—" : "PKR " + (paisa / 100).toLocaleString("en-PK");
 
+  // Comparative Statement shape: vendors across, PR lines down.
+  const comparativeQuotes = pr.quotations.map((q) => ({
+    id: q.id,
+    vendor: q.vendor.company,
+    total: q.amount,
+    cells: Object.fromEntries(
+      q.lines.map((cl) => [
+        cl.prLineId,
+        {
+          id: cl.id,
+          specification: cl.specification,
+          rate: cl.rate,
+          selected: cl.selected,
+        },
+      ]),
+    ),
+  }));
+
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-mono text-2xl font-semibold">{pr.prNo}</h1>
@@ -159,7 +180,8 @@ export default async function PRDetailPage({
           )}
           {pr.status === "APPROVED" && (
             <p className="text-sm text-muted-foreground">
-              Approved — quotations / PO / GRN in the next phase.
+              Approved — record quotations, award the comparative, then generate
+              the PO(s).
             </p>
           )}
           {pr.status === "REJECTED" && (
@@ -172,100 +194,67 @@ export default async function PRDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {hasFull ? "Quotations & Comparative" : "Purchase Order (simplified)"}
+              {hasFull ? "Comparative Statement" : "Purchase Order (simplified)"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {hasFull && (
               <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead className="text-right">Select</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pr.quotations.map((q) => (
-                      <TableRow key={q.id}>
-                        <TableCell>{q.vendor.company}</TableCell>
-                        <TableCell>{pkr(q.amount)}</TableCell>
-                        <TableCell className="text-right">
-                          {q.selected ? (
-                            <Badge>Selected</Badge>
-                          ) : (
-                            canSelectQuotation(user.designation) &&
-                            pr.status === "APPROVED" && (
-                              <form action={selectQuotation}>
-                                <input type="hidden" name="prId" value={pr.id} />
-                                <input type="hidden" name="quotationId" value={q.id} />
-                                <Button size="sm" variant="outline" type="submit">
-                                  Select
-                                </Button>
-                              </form>
-                            )
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {pr.quotations.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-muted-foreground">
-                          No quotations yet.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-                {pr.status === "APPROVED" && canRecordQuotation(user.designation) && (
-                  <form
-                    action={addQuotation}
-                    className="flex flex-wrap items-end gap-3 border-t pt-3"
-                  >
-                    <input type="hidden" name="prId" value={pr.id} />
-                    <div className="grid gap-1.5">
-                      <label className="text-xs text-muted-foreground">Vendor</label>
-                      <select
-                        name="vendorId"
-                        required
-                        defaultValue=""
-                        className="h-9 rounded-md border bg-transparent px-2 text-sm"
-                      >
-                        <option value="" disabled>
-                          Select…
-                        </option>
-                        {vendors.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.company}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid gap-1.5">
-                      <label className="text-xs text-muted-foreground">
-                        Amount (PKR)
-                      </label>
-                      <input
-                        name="amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        required
-                        className="h-9 rounded-md border bg-transparent px-2 text-sm"
-                      />
-                    </div>
-                    <Button size="sm" type="submit">
-                      Add quotation
-                    </Button>
-                  </form>
+                {pr.quotations.length > 0 ? (
+                  <Comparative
+                    prId={pr.id}
+                    canAward={
+                      canSelectQuotation(user.designation) &&
+                      pr.status === "APPROVED"
+                    }
+                    lines={pr.lines.map((l) => ({
+                      id: l.id,
+                      description: l.description,
+                      specification: l.specification,
+                      quantity: l.quantity,
+                      unit: l.unit,
+                      selectionNote: l.selectionNote,
+                    }))}
+                    quotations={comparativeQuotes}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No quotations recorded yet.
+                  </p>
                 )}
+
+                <div className="flex flex-wrap items-center gap-4 border-t pt-3">
+                  {pr.status === "APPROVED" &&
+                    canRecordQuotation(user.designation) && (
+                      <AddQuotationButton
+                        prId={pr.id}
+                        vendors={vendors.map((v) => ({
+                          id: v.id,
+                          company: v.company,
+                        }))}
+                        lines={pr.lines.map((l) => ({
+                          id: l.id,
+                          description: l.description,
+                          quantity: l.quantity,
+                          unit: l.unit,
+                        }))}
+                      />
+                    )}
+                  {pr.quotations.length > 0 && (
+                    <Link
+                      href={`/app/procurement/${pr.id}/comparative`}
+                      className="text-sm text-muted-foreground underline"
+                    >
+                      Print comparative statement
+                    </Link>
+                  )}
+                </div>
               </>
             )}
 
             {pr.status === "APPROVED" &&
               canGeneratePO(user.designation) &&
-              !pr.po &&
+              pr.pos.length === 0 &&
               (hasFull ? (
                 <form action={generatePO} className="border-t pt-3">
                   <input type="hidden" name="prId" value={pr.id} />
@@ -273,8 +262,11 @@ export default async function PRDetailPage({
                     type="submit"
                     disabled={!pr.quotations.some((q) => q.selected)}
                   >
-                    Generate PO from selected quote
+                    Generate PO(s) from award
                   </Button>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    One PO is issued per winning vendor.
+                  </p>
                 </form>
               ) : (
                 <form
@@ -318,112 +310,140 @@ export default async function PRDetailPage({
                 </form>
               ))}
 
-            {pr.po && (
-              <div className="rounded-md border p-3 text-sm">
-                <div className="font-medium">
-                  PO <span className="font-mono">{pr.po.poNo}</span> ·{" "}
-                  <Badge variant="secondary">{pr.po.status}</Badge>
-                </div>
-                <div className="text-muted-foreground">
-                  {pr.po.vendor?.company ?? "—"} · {pkr(pr.po.amount)}
-                </div>
+            {pr.pos.length > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                {pr.pos.map((po) => (
+                  <div key={po.id} className="rounded-md border p-3 text-sm">
+                    <div className="font-medium">
+                      PO <span className="font-mono">{po.poNo}</span> ·{" "}
+                      <Badge variant="secondary">{po.status}</Badge>
+                    </div>
+                    <div className="text-muted-foreground">
+                      {po.vendor?.company ?? "—"} · {pkr(po.amount)} ·{" "}
+                      {po.lines.length} item{po.lines.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {pr.po && (
+      {pr.pos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Goods Receiving</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {canMarkReceived(user.designation) && (
-              <form action={markReceived}>
-                <input type="hidden" name="poId" value={pr.po.id} />
-                <Button size="sm" type="submit">
-                  Mark delivery received
-                </Button>
-              </form>
-            )}
-            {pr.po.receipts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No deliveries yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Received</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>GRN</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pr.po.receipts.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(r.receivedAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            r.status === "ACCEPTED"
-                              ? "default"
-                              : r.status === "REJECTED"
-                                ? "destructive"
-                                : "outline"
-                          }
-                        >
-                          {r.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {r.grn?.grnNo ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {r.status === "PENDING_INSPECTION" &&
-                          canInspectGoods(user.designation) && (
-                            <form
-                              action={inspectReceipt}
-                              className="flex justify-end gap-2"
+          <CardContent className="space-y-5">
+            {pr.pos.map((po) => (
+              <div key={po.id} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">
+                    <span className="font-mono">{po.poNo}</span>
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      {po.vendor?.company ?? "—"}
+                    </span>
+                  </div>
+                  {canMarkReceived(user.designation) &&
+                    po.status !== "RECEIVED" && (
+                      <form action={markReceived}>
+                        <input type="hidden" name="poId" value={po.id} />
+                        <Button size="sm" type="submit">
+                          Mark delivery received
+                        </Button>
+                      </form>
+                    )}
+                </div>
+                {po.receipts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No deliveries yet.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Received</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>GRN</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {po.receipts.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="text-muted-foreground">
+                            {formatDate(r.receivedAt)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                r.status === "ACCEPTED"
+                                  ? "default"
+                                  : r.status === "REJECTED"
+                                    ? "destructive"
+                                    : "outline"
+                              }
                             >
-                              <input type="hidden" name="receiptId" value={r.id} />
-                              <Button
-                                size="sm"
-                                type="submit"
-                                name="decision"
-                                value="ACCEPTED"
-                              >
-                                Accept
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                type="submit"
-                                name="decision"
-                                value="REJECTED"
-                              >
-                                Reject
-                              </Button>
-                            </form>
-                          )}
-                        {r.status === "ACCEPTED" &&
-                          !r.grn &&
-                          canManageStore(user.designation) && (
-                            <form action={issueGRN}>
-                              <input type="hidden" name="receiptId" value={r.id} />
-                              <Button size="sm" type="submit">
-                                Issue GRN
-                              </Button>
-                            </form>
-                          )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                              {r.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {r.grn?.grnNo ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {r.status === "PENDING_INSPECTION" &&
+                              canInspectGoods(user.designation) && (
+                                <form
+                                  action={inspectReceipt}
+                                  className="flex justify-end gap-2"
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="receiptId"
+                                    value={r.id}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    type="submit"
+                                    name="decision"
+                                    value="ACCEPTED"
+                                  >
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    type="submit"
+                                    name="decision"
+                                    value="REJECTED"
+                                  >
+                                    Reject
+                                  </Button>
+                                </form>
+                              )}
+                            {r.status === "ACCEPTED" &&
+                              !r.grn &&
+                              canManageStore(user.designation) && (
+                                <form action={issueGRN}>
+                                  <input
+                                    type="hidden"
+                                    name="receiptId"
+                                    value={r.id}
+                                  />
+                                  <Button size="sm" type="submit">
+                                    Issue GRN
+                                  </Button>
+                                </form>
+                              )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

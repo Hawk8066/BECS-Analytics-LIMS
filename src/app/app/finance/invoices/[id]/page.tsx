@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { formatDate } from "@/lib/format";
@@ -7,8 +8,9 @@ import {
   canRecordPayment,
   canViewFinance,
 } from "@/lib/auth/perms";
-import { PaymentForm } from "./payment-form";
+import { RecordPaymentButton } from "./record-payment-button";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -46,7 +48,14 @@ export default async function InvoiceDetailPage({
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { client: true, payments: { orderBy: { createdAt: "desc" } } },
+    include: {
+      client: true,
+      payments: { orderBy: { createdAt: "desc" } },
+      items: { orderBy: { name: "asc" } },
+      // The quotation this invoice was raised from (for legacy invoices with no
+      // stored line items, and to link back to the quote).
+      quotation: { include: { items: { orderBy: { name: "asc" } } } },
+    },
   });
   if (!invoice) notFound();
   if (!user.canReadCrossSection && invoice.facilityId !== user.facilityId)
@@ -54,6 +63,30 @@ export default async function InvoiceDetailPage({
 
   const paid = invoice.payments.reduce((s, p) => s + p.amount, 0);
   const balance = invoice.amount - paid;
+
+  // Prefer the invoice's own snapshotted lines; fall back to the quotation's for
+  // invoices issued before line items were stored.
+  const lines =
+    invoice.items.length > 0
+      ? invoice.items.map((it) => ({ ...it, discount: it.discount }))
+      : (invoice.quotation?.items ?? []).map((it) => ({
+          id: it.id,
+          kind: it.kind,
+          name: it.name,
+          price: it.price,
+          discount: 0,
+        }));
+  const anyLineDiscount = lines.some((l) => l.discount > 0);
+  const lineTotal = lines.reduce((s, l) => s + (l.price - l.discount), 0);
+  // Rebuild the money trail: line total → total discount → net → + tax → amount.
+  const totalDiscount =
+    invoice.discountKind === "PERCENT"
+      ? Math.round((lineTotal * invoice.discountValue) / 100)
+      : invoice.discountKind === "AMOUNT"
+        ? Math.min(lineTotal, invoice.discountValue)
+        : 0;
+  const netTotal = lineTotal - totalDiscount;
+  const tax = invoice.amount - netTotal; // tax = amount − net (both snapshotted)
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -64,7 +97,15 @@ export default async function InvoiceDetailPage({
             {invoice.client.company}
           </p>
         </div>
-        <Badge>{invoice.status}</Badge>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/app/finance/invoices/${invoice.id}/print`}
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+          >
+            Print / Save as PDF
+          </Link>
+          <Badge>{invoice.status}</Badge>
+        </div>
       </div>
 
       <Card>
@@ -83,6 +124,112 @@ export default async function InvoiceDetailPage({
           </div>
         </CardContent>
       </Card>
+
+      {lines.length > 0 && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base">Breakdown</CardTitle>
+            {invoice.quotation && (
+              <Link
+                href={`/app/quotations/${invoice.quotation.id}`}
+                className="font-mono text-xs underline"
+              >
+                {invoice.quotation.quoteNo}
+              </Link>
+            )}
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Price</TableHead>
+                  {anyLineDiscount && (
+                    <>
+                      <TableHead className="text-right">Discount</TableHead>
+                      <TableHead className="text-right">Net</TableHead>
+                    </>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((it) => (
+                  <TableRow key={it.id}>
+                    <TableCell>{it.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {it.kind === "PACKAGE" ? "Package" : "Parameter"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{pkr(it.price)}</TableCell>
+                    {anyLineDiscount && (
+                      <>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {it.discount > 0 ? `− ${pkr(it.discount)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {pkr(it.price - it.discount)}
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                ))}
+                {(invoice.discountKind !== "NONE" || invoice.taxPct > 0) && (
+                  <TableRow>
+                    <TableCell colSpan={anyLineDiscount ? 4 : 2} className="text-right text-muted-foreground">
+                      {anyLineDiscount ? "After line discounts" : "Subtotal"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {pkr(lineTotal)}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {invoice.discountKind !== "NONE" && (
+                  <TableRow>
+                    <TableCell colSpan={anyLineDiscount ? 4 : 2} className="text-right text-muted-foreground">
+                      Total discount
+                      {invoice.discountKind === "PERCENT" ? ` (${invoice.discountValue}%)` : ""}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      − {pkr(totalDiscount)}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {invoice.taxPct > 0 && (
+                  <TableRow>
+                    <TableCell colSpan={anyLineDiscount ? 4 : 2} className="text-right text-muted-foreground">
+                      Services tax ({invoice.taxPct}%)
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      + {pkr(tax)}
+                    </TableCell>
+                  </TableRow>
+                )}
+                <TableRow>
+                  <TableCell colSpan={anyLineDiscount ? 4 : 2} className="text-right font-medium">
+                    Total
+                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {pkr(invoice.amount)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {invoice.memo && lines.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Description</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-line text-sm text-muted-foreground">
+              {invoice.memo}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -117,7 +264,7 @@ export default async function InvoiceDetailPage({
             </TableBody>
           </Table>
           {balance > 0 && canRecordPayment(user.designation) && (
-            <PaymentForm invoiceId={invoice.id} />
+            <RecordPaymentButton invoiceId={invoice.id} balance={balance} />
           )}
         </CardContent>
       </Card>

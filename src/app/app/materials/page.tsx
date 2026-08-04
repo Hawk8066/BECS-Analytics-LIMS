@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { readScope } from "@/lib/db/scope";
 import { canManageMaterials } from "@/lib/auth/perms";
 import { buttonVariants } from "@/components/ui/button";
+import { ImportExcel } from "@/components/import-excel";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import {
@@ -57,6 +58,8 @@ export default async function MaterialsPage({
           </Link>
         )}
       </div>
+
+      <ImportExcel model="MaterialItem" path="/app/materials" label="materials" />
 
       <div className="flex gap-1 border-b">
         {TABS.map((t) => (

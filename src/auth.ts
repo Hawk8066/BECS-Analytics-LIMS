@@ -68,6 +68,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           sectionId: user.sectionId,
           clientId: user.clientId,
           vendorId: user.vendorId,
+          outsourceLabId: user.outsourceLabId,
         };
       },
     }),
