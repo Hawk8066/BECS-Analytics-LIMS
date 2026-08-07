@@ -46,6 +46,7 @@ export default async function ReportPage({
             },
           },
           standard: { select: { name: true } },
+          thirdParty: { select: { company: true } },
         },
       },
     },
@@ -117,8 +118,8 @@ export default async function ReportPage({
           <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
             <span className="text-muted-foreground">Issued to</span>
             <span>
-              {sample.thirdPartyName ? (
-                sample.thirdPartyName
+              {(sample.thirdParty?.company ?? sample.thirdPartyName) ? (
+                sample.thirdParty?.company ?? sample.thirdPartyName
               ) : seeClient ? (
                 client ? (
                   `${client.company} (${client.clientNo})`

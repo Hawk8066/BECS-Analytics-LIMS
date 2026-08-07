@@ -59,6 +59,7 @@ export default async function AppLayout({
           items: [
             { href: "/app/overview", label: "Overview" },
             { href: "/app/clients", label: "Clients" },
+            { href: "/app/third-parties", label: "Third Parties" },
             { href: "/app/samples", label: "Samples" },
             // Management view — only for those who assign work and track analysts.
             ...(canCoordinateTesting(user.designation)

@@ -47,6 +47,7 @@ export default async function ReportPrintPage({
             orderBy: { createdAt: "asc" },
           },
           standard: { select: { name: true } },
+          thirdParty: true,
         },
       },
     },
@@ -109,15 +110,24 @@ export default async function ReportPrintPage({
       .filter((d): d is Date => !!d)
       .sort((a, b) => b.getTime() - a.getTime())[0] ?? report.approvedAt;
 
-  const clientAddress = client
+  // The report is addressed to the third party when one was chosen (its own name
+  // + address), otherwise the client. Legacy free-text thirdPartyName is a
+  // fallback for samples booked before third parties were entities.
+  const tp = sample.thirdParty;
+  const addrSource = tp ?? client ?? null;
+  const clientAddress = addrSource
     ? ([
-        client.addressLine1,
-        client.addressLine2,
-        client.addressLine3,
-        [client.city, client.province, client.country].filter(Boolean).join(", "),
+        addrSource.addressLine1,
+        addrSource.addressLine2,
+        addrSource.addressLine3,
+        [addrSource.city, addrSource.province, addrSource.country]
+          .filter(Boolean)
+          .join(", "),
       ].filter(Boolean) as string[])
     : [];
-  const issuedTo = sample.thirdPartyName ?? client?.company ?? "—";
+  const issuedTo = tp?.company ?? sample.thirdPartyName ?? client?.company ?? "—";
+  const focalPerson = tp?.contactPerson ?? client?.contactPerson ?? null;
+  const focalNumber = tp?.contactNumber ?? client?.contactNumber ?? null;
 
   return (
     <>
@@ -178,12 +188,14 @@ export default async function ReportPrintPage({
                   {l}
                 </div>
               ))}
-              {client?.contactPerson && (
+              {focalPerson && (
                 <div className="mt-3">
-                  <div className="font-semibold">Client&apos;s Focal Person</div>
-                  <div className="text-neutral-700">{client.contactPerson}</div>
-                  {client.contactNumber && (
-                    <div className="text-neutral-700">{client.contactNumber}</div>
+                  <div className="font-semibold">
+                    {tp ? "Focal Person" : "Client's Focal Person"}
+                  </div>
+                  <div className="text-neutral-700">{focalPerson}</div>
+                  {focalNumber && (
+                    <div className="text-neutral-700">{focalNumber}</div>
                   )}
                 </div>
               )}

@@ -24,6 +24,8 @@ const SampleSchema = z.object({
   priority: z.string().optional(),
   instructions: z.string().optional(),
   thirdPartyName: z.string().optional(),
+  /** Third party the report is issued in the name of, if any. */
+  thirdPartyId: z.string().optional(),
   /** Accepted quotation this sample is booked against, if any. */
   quotationId: z.string().optional(),
   /** Conformity standard the sample is judged against, if any (on request). */
@@ -119,6 +121,16 @@ export async function registerSample(
       limitByParam.set(l.parameterId, { min: l.min, max: l.max });
   }
 
+  // Optional third party the report is issued in the name of.
+  const thirdPartyId = d.thirdPartyId?.trim() || null;
+  if (thirdPartyId) {
+    const tp = await prisma.thirdParty.findUnique({
+      where: { id: thirdPartyId },
+      select: { id: true },
+    });
+    if (!tp) return { error: "That third party no longer exists." };
+  }
+
   const now = new Date();
   const year = now.getFullYear();
   // Lab ID period segment: YYMM (e.g. June 2026 -> "2606").
@@ -158,6 +170,7 @@ export async function registerSample(
         priority: d.priority || null,
         instructions: d.instructions || null,
         thirdPartyName: d.thirdPartyName || null,
+        thirdPartyId,
         quotationId,
         standardId,
         facilityId: facility.id,

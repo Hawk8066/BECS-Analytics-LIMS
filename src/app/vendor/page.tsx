@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
@@ -95,7 +96,11 @@ export default async function VendorHome() {
               <TableBody>
                 {orders.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-mono text-xs">{o.poNo}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link href={`/vendor/po/${o.id}`} className="hover:underline">
+                        {o.poNo}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(o.createdAt)}
                     </TableCell>
@@ -138,7 +143,14 @@ export default async function VendorHome() {
               <TableBody>
                 {quotations.map((q) => (
                   <TableRow key={q.id}>
-                    <TableCell className="font-mono text-xs">{q.pr.prNo}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={`/vendor/quotations/${q.id}`}
+                        className="hover:underline"
+                      >
+                        {q.pr.prNo}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(q.createdAt)}
                     </TableCell>

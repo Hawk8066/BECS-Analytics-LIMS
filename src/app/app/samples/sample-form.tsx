@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { registerSample, type FormState } from "@/lib/actions/samples";
+import { ThirdPartyQuickAdd } from "./third-party-quick-add";
 import { priceAt, type PriceEntry, type PricePriority } from "@/lib/pricing";
 import { UNITS } from "@/lib/units";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ export function SampleForm({
   packages,
   quotations,
   standards,
+  thirdParties,
   defaultQuotationId,
 }: {
   labs: { id: string; name: string }[];
@@ -83,6 +85,8 @@ export function SampleForm({
   quotations: QuotationOpt[];
   /** Conformity standards the sample can be booked against (on request). */
   standards: StandardOpt[];
+  /** Third parties the report may be issued in the name of. */
+  thirdParties: { id: string; label: string }[];
   defaultQuotationId?: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -109,6 +113,9 @@ export function SampleForm({
   const [matrix, setMatrix] = useState("");
   // Optional conformity standard the client asked their sample to be judged against.
   const [standardId, setStandardId] = useState("");
+  // Optional third party the report is issued in the name of; quick-add appends here.
+  const [thirdPartyId, setThirdPartyId] = useState("");
+  const [tpList, setTpList] = useState(thirdParties);
   const [paramQuery, setParamQuery] = useState("");
   const [params, setParams] = useState<Set<string>>(new Set());
   const [pkgs, setPkgs] = useState<Set<string>>(new Set());
@@ -426,8 +433,35 @@ export function SampleForm({
           </select>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="thirdPartyName">Third-party report name</Label>
-          <Input id="thirdPartyName" name="thirdPartyName" />
+          <Label htmlFor="thirdPartyId">Third party (optional)</Label>
+          <div className="flex gap-2">
+            <select
+              id="thirdPartyId"
+              name="thirdPartyId"
+              value={thirdPartyId}
+              onChange={(e) => setThirdPartyId(e.target.value)}
+              className="h-9 flex-1 rounded-md border bg-transparent px-2 text-sm"
+            >
+              <option value="">— none (report in client&apos;s name) —</option>
+              {tpList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <ThirdPartyQuickAdd
+              onCreated={(id, label) => {
+                setTpList((prev) =>
+                  prev.some((x) => x.id === id) ? prev : [...prev, { id, label }],
+                );
+                setThirdPartyId(id);
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            If set, the report is issued in this third party&apos;s name and
+            address.
+          </p>
         </div>
       </div>
       <div className="grid gap-2">

@@ -962,7 +962,10 @@ model Sample {
   physicalCondition String? // e.g. "Solid granules", "Liquid" — shown on the report
   priority        String?
   instructions    String?
-  thirdPartyName  String? // report issued in the name of a third party
+  thirdPartyName  String? // legacy free-text third-party name (superseded by thirdParty)
+  // Report issued in the name of a saved third party (address shown on the report).
+  thirdPartyId    String?
+  thirdParty      ThirdParty?  @relation(fields: [thirdPartyId], references: [id])
   status          SampleStatus @default(REGISTERED)
   // The accepted quotation this sample was booked against, when there is one:
   // walk-in samples have none, quoted work is traceable back to what was agreed.
@@ -990,6 +993,34 @@ model Sample {
   @@index([status])
   @@index([quotationId])
   @@index([standardId])
+  @@index([thirdPartyId])
+}
+
+// A third party a client asks the report to be issued in the name of (decode-time
+// identity, SSOT §8). A lightweight named entity with its own address — no portal
+// login. Selected while booking a sample; its name + address print on the report.
+model ThirdParty {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  company       String
+  addressLine1  String?
+  addressLine2  String?
+  addressLine3  String?
+  city          String?
+  province      String?
+  country       String?
+  contactPerson String?
+  contactNumber String?
+  email         String?
+  ntn           String?
+  stn           String?
+  facilityId    String
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  samples Sample[]
+
+  @@index([facilityId])
 }
 
 // A test line item on a sample (sample × parameter). Result entry + raw-data
@@ -1278,36 +1309,47 @@ enum ExpiryCheck {
   NA
 }
 
-// Incoming Inspection Checklist (BECS/FF/606/09). One per GoodsReceipt: the
-// store officer / lab manager records the per-section checks and the accept/
-// reject decision that drives the receipt status. Item lists snapshot the
-// delivery's items grouped by section.
+// Checklist section a delivered item falls into (from its requested category).
+enum InspectionSection {
+  CHEMICAL
+  EQUIPMENT
+  MATERIAL
+}
+
+// Incoming Inspection Checklist (BECS/FF/606/09). One per GoodsReceipt: header
+// (supplier, notes, accept/reject decision) plus a checked row per delivered
+// item. Only sections with items appear on the form.
 model IncomingInspection {
   id             String       @id @default(uuid())
   goodsReceiptId String       @unique
   goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
 
-  supplier       String? // vendor name at inspection time
-  chemicalItems  String?
-  equipmentItems String?
-  materialItems  String?
-
-  chemSpecs    CheckAnswer?
-  chemQuantity CheckAnswer?
-  chemPacking  CheckAnswer?
-  chemExpiry   ExpiryCheck?
-  chemStorage  CheckAnswer?
-
-  equipSpecs   CheckAnswer?
-  equipPacking CheckAnswer?
-
-  matSpecs    CheckAnswer?
-  matQuantity CheckAnswer?
-
+  supplier      String? // vendor name at inspection time
   notes         String?
   decision      ReceiptStatus // ACCEPTED / REJECTED chosen by the inspector
   inspectedById String?
   createdAt     DateTime      @default(now())
+
+  items InspectionItem[]
+}
+
+// One checked item on the Incoming Inspection Checklist. The checks used depend
+// on the section: chemicals use all five (specs/quantity/packing/expiry/storage);
+// equipment uses specs + packing; material uses specs + quantity.
+model InspectionItem {
+  id           String             @id @default(uuid())
+  inspectionId String
+  inspection   IncomingInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  poLineId     String?
+  name         String
+  section      InspectionSection
+  specs        CheckAnswer?
+  quantity     CheckAnswer?
+  packing      CheckAnswer?
+  expiry       ExpiryCheck?
+  storage      CheckAnswer?
+
+  @@index([inspectionId])
 }
 
 // Goods Receiving Note — issued by the Store In-charge after accepted inspection

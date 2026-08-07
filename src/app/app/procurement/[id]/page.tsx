@@ -351,16 +351,12 @@ export default async function PRDetailPage({
           </CardHeader>
           <CardContent className="space-y-5">
             {pr.pos.map((po) => {
-              // Group the delivery's items by inspection-checklist section.
-              const secItems = {
-                chemical: [] as string[],
-                equipment: [] as string[],
-                material: [] as string[],
-              };
-              for (const l of po.lines)
-                secItems[inspectionSection(l.prLine.category)].push(
-                  l.description,
-                );
+              // The delivery's items with their inspection-checklist section.
+              const inspItems = po.lines.map((l) => ({
+                poLineId: l.id,
+                name: l.description,
+                section: inspectionSection(l.prLine.category),
+              }));
               return (
               <div key={po.id} className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -424,9 +420,7 @@ export default async function PRDetailPage({
                                     receiptId={r.id}
                                     supplier={po.vendor?.company ?? ""}
                                     prNo={pr.prNo}
-                                    chemicalItems={secItems.chemical.join(", ")}
-                                    equipmentItems={secItems.equipment.join(", ")}
-                                    materialItems={secItems.material.join(", ")}
+                                    items={inspItems}
                                   />
                                 )}
                               {r.inspection && (

@@ -2,7 +2,7 @@ import type { ItemCategory } from "@prisma/client";
 
 // The Incoming Inspection Checklist (BECS/FF/606/09) groups items into three
 // sections, each with its own set of checks. Requested item categories map onto
-// these sections so the checklist can be pre-filled from the delivery.
+// these sections so only the relevant sections (and their items) appear.
 
 export type Section = "chemical" | "equipment" | "material";
 
@@ -13,38 +13,36 @@ export function inspectionSection(category: ItemCategory): Section {
   return "material";
 }
 
-// Yes/No checks per section (field keys align with IncomingInspection columns
-// and the form-data names posted from the checklist). Expiry is handled apart
-// (OK / Expired). "applicable" marks the "where applicable" rows.
-export interface Check {
-  key: string;
-  label: string;
-  applicable?: boolean; // renders an extra N/A option
-}
-
-export const CHEM_CHECKS: Check[] = [
-  { key: "chemSpecs", label: "Check specifications as per the order" },
-  { key: "chemQuantity", label: "Check quantity as per order" },
-  { key: "chemPacking", label: "Check proper packing" },
-  {
-    key: "chemStorage",
-    label: "Manufacturer's storage instructions complied",
-    applicable: true,
-  },
-];
-
-export const EQUIP_CHECKS: Check[] = [
-  { key: "equipSpecs", label: "Check specifications as per the order" },
-  { key: "equipPacking", label: "Check proper packing" },
-];
-
-export const MAT_CHECKS: Check[] = [
-  { key: "matSpecs", label: "Check specifications as per the order" },
-  { key: "matQuantity", label: "Check quantity as per order" },
-];
-
 export const SECTION_LABEL: Record<Section, string> = {
   chemical: "Chemicals",
   equipment: "Equipment",
   material: "Material",
 };
+
+export const SECTION_ORDER: Section[] = ["chemical", "equipment", "material"];
+
+// The checks that apply to an item, by section. `expiry` is OK/Expired; `storage`
+// is a "where applicable" yes/no; the rest are plain yes/no.
+export type CheckField = "specs" | "quantity" | "packing" | "expiry" | "storage";
+
+export const CHECK_LABEL: Record<CheckField, string> = {
+  specs: "Specifications as per the order",
+  quantity: "Quantity as per order",
+  packing: "Proper packing",
+  expiry: "Expiry date (where applicable)",
+  storage: "Storage instructions complied (where applicable)",
+};
+
+export const CHECKS_BY_SECTION: Record<Section, CheckField[]> = {
+  chemical: ["specs", "quantity", "packing", "expiry", "storage"],
+  equipment: ["specs", "packing"],
+  material: ["specs", "quantity"],
+};
+
+// Between the lowercase UI Section and the Prisma InspectionSection enum value.
+export function sectionEnum(s: Section): "CHEMICAL" | "EQUIPMENT" | "MATERIAL" {
+  return s.toUpperCase() as "CHEMICAL" | "EQUIPMENT" | "MATERIAL";
+}
+export function sectionFromEnum(e: string): Section {
+  return e.toLowerCase() as Section;
+}

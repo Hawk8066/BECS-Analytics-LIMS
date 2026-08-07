@@ -15,8 +15,15 @@ const LAB_NAMES: Record<string, string> = {
 };
 
 export async function loadSampleFormData(user: SessionUser) {
-  const [clients, parameters, facilities, packages, standards, quotations] =
-    await Promise.all([
+  const [
+    clients,
+    parameters,
+    facilities,
+    packages,
+    standards,
+    quotations,
+    thirdParties,
+  ] = await Promise.all([
     prisma.client.findMany({
       where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
       orderBy: { company: "asc" },
@@ -48,9 +55,15 @@ export async function loadSampleFormData(user: SessionUser) {
       },
       orderBy: { createdAt: "desc" },
     }),
+    // Third parties a report can be issued in the name of (facility-scoped).
+    prisma.thirdParty.findMany({
+      where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
+      orderBy: { company: "asc" },
+    }),
   ]);
 
   return {
+    thirdParties: thirdParties.map((t) => ({ id: t.id, label: t.company })),
     labs: facilities.map((f) => ({ id: f.id, name: LAB_NAMES[f.code] ?? f.name })),
     defaultLabId: user.facilityId,
     matrices: [

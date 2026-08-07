@@ -1,10 +1,19 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canAccessPR } from "@/lib/procurement/access";
 import { formatDate } from "@/lib/format";
 import { designationLabel } from "@/lib/labels";
+import {
+  CHECKS_BY_SECTION,
+  CHECK_LABEL,
+  SECTION_LABEL,
+  SECTION_ORDER,
+  sectionFromEnum,
+  type CheckField,
+} from "@/lib/procurement/inspection";
 import { PrintButton } from "../../[id]/print/print-button";
 
 // One boxed option; the chosen answer is filled black.
@@ -46,6 +55,19 @@ function row(label: string, node: React.ReactNode) {
   );
 }
 
+type ItemRow = {
+  specs: string | null;
+  quantity: string | null;
+  packing: string | null;
+  storage: string | null;
+};
+function ynValue(it: ItemRow, field: CheckField): string | null {
+  if (field === "quantity") return it.quantity;
+  if (field === "packing") return it.packing;
+  if (field === "storage") return it.storage;
+  return it.specs;
+}
+
 export default async function InspectionPrintPage({
   params,
 }: {
@@ -59,7 +81,7 @@ export default async function InspectionPrintPage({
   const receipt = await prisma.goodsReceipt.findUnique({
     where: { id: receiptId },
     include: {
-      inspection: true,
+      inspection: { include: { items: true } },
       po: { include: { vendor: true, pr: true } },
     },
   });
@@ -78,6 +100,12 @@ export default async function InspectionPrintPage({
     ? `${inspectorName} — ${designationLabel(inspector.designation)}`
     : "";
   const supplier = insp.supplier ?? receipt.po.vendor?.company ?? "";
+
+  const items = [...insp.items].sort(
+    (a, b) =>
+      SECTION_ORDER.indexOf(sectionFromEnum(a.section)) -
+      SECTION_ORDER.indexOf(sectionFromEnum(b.section)),
+  );
 
   return (
     <>
@@ -151,56 +179,42 @@ export default async function InspectionPrintPage({
             </div>
           </div>
 
-          {/* Chemicals */}
-          <div className="mt-4">
-            <div className="text-[13px] font-bold">
-              CHEMICALS:{" "}
-              <span className="font-normal underline">
-                {insp.chemicalItems || "—"}
-              </span>
-            </div>
-            <div className="mt-1 divide-y border-t">
-              {row("Check specifications as per the order", yesNo(insp.chemSpecs))}
-              {row("Check quantity as per order", yesNo(insp.chemQuantity))}
-              {row("Check proper packing", yesNo(insp.chemPacking))}
-              {row(
-                "Check expiry date (where applicable)",
-                okExpired(insp.chemExpiry),
-              )}
-              {row(
-                "Manufacturer's storage instructions complied (where applicable)",
-                yesNo(insp.chemStorage, true),
-              )}
-            </div>
-          </div>
-
-          {/* Equipment */}
-          <div className="mt-4">
-            <div className="text-[13px] font-bold">
-              EQUIPMENT:{" "}
-              <span className="font-normal underline">
-                {insp.equipmentItems || "—"}
-              </span>
-            </div>
-            <div className="mt-1 divide-y border-t">
-              {row("Check specifications as per the order", yesNo(insp.equipSpecs))}
-              {row("Check proper packing", yesNo(insp.equipPacking))}
-            </div>
-          </div>
-
-          {/* Material */}
-          <div className="mt-4">
-            <div className="text-[13px] font-bold">
-              MATERIAL:{" "}
-              <span className="font-normal underline">
-                {insp.materialItems || "—"}
-              </span>
-            </div>
-            <div className="mt-1 divide-y border-t">
-              {row("Check specifications as per the order", yesNo(insp.matSpecs))}
-              {row("Check quantity as per order", yesNo(insp.matQuantity))}
-            </div>
-          </div>
+          {/* Items grouped by section (only sections present) */}
+          {items.length === 0 ? (
+            <p className="mt-6 text-[12px]">No items were inspected.</p>
+          ) : (
+            items.map((it, i) => {
+              const sec = sectionFromEnum(it.section);
+              const firstOfSection =
+                i === 0 || sectionFromEnum(items[i - 1].section) !== sec;
+              return (
+                <Fragment key={it.id}>
+                  {firstOfSection && (
+                    <div className="mt-4 text-[13px] font-bold uppercase">
+                      {SECTION_LABEL[sec]}
+                    </div>
+                  )}
+                  <div className="mt-1 border-t pt-1">
+                    <div className="text-[12px] font-semibold underline">
+                      {it.name}
+                    </div>
+                    <div className="divide-y">
+                      {CHECKS_BY_SECTION[sec].map((field) => (
+                        <Fragment key={field}>
+                          {row(
+                            CHECK_LABEL[field],
+                            field === "expiry"
+                              ? okExpired(it.expiry)
+                              : yesNo(ynValue(it, field), field === "storage"),
+                          )}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </Fragment>
+              );
+            })
+          )}
 
           {insp.notes && (
             <p className="mt-4 text-[12px]">

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { SelectOrOther } from "@/components/ui/select-or-other";
 import { SECTORS } from "@/lib/sectors";
 
-const PROVINCES = [
+export const PROVINCES = [
   "Punjab",
   "Sindh",
   "Khyber Pakhtunkhwa",
@@ -19,7 +19,7 @@ const PROVINCES = [
   "Islamabad Capital Territory",
 ];
 
-const CITIES = [
+export const CITIES = [
   "Lahore",
   "Karachi",
   "Islamabad",
@@ -38,7 +38,7 @@ const CITIES = [
   "Sukkur",
 ];
 
-const COUNTRIES = [
+export const COUNTRIES = [
   "Pakistan",
   "Afghanistan",
   "Bangladesh",

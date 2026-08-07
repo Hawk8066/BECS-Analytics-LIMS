@@ -2,20 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canAccessPR } from "@/lib/procurement/access";
 import { PrintButton } from "@/components/print-button";
 import { PoDocument } from "@/components/procurement/po-document";
 
-async function nameOf(id: string | null): Promise<string> {
-  if (!id) return "";
-  const u = await prisma.user.findUnique({
-    where: { id },
-    include: { profile: { select: { fullName: true } } },
-  });
-  return u?.profile?.fullName ?? u?.email ?? "";
-}
-
-export default async function POPage({
+export default async function VendorPOPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -23,23 +13,26 @@ export default async function POPage({
   const { id } = await params;
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (user.status !== "ACTIVE") redirect("/app/onboarding");
+  if (user.designation !== "VENDOR" || !user.vendorId) redirect("/app");
 
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
-    include: { vendor: true, lines: true, pr: true },
+    include: {
+      vendor: true,
+      lines: true,
+      pr: { select: { prNo: true, facilityId: true } },
+    },
   });
-  if (!po) notFound();
-  if (!canAccessPR(user, po.pr)) notFound();
+  // A vendor may only view its own orders.
+  if (!po || po.vendorId !== user.vendorId) notFound();
 
   const facility = await prisma.facility.findUnique({
     where: { id: po.pr.facilityId },
+    select: { name: true },
   });
-  const issuedBy = await nameOf(po.issuedById);
 
   return (
     <>
-      {/* Isolate the document for printing regardless of the app shell. */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -49,13 +42,10 @@ export default async function POPage({
         }
       `}</style>
 
-      <div className="mx-auto max-w-[850px] space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between print:hidden">
-          <Link
-            href={`/app/procurement/${po.prId}`}
-            className="text-sm text-muted-foreground underline"
-          >
-            ← Back to request
+          <Link href="/vendor" className="text-sm text-muted-foreground underline">
+            ← Back to portal
           </Link>
           <PrintButton />
         </div>
@@ -71,7 +61,7 @@ export default async function POPage({
             lines: po.lines,
           }}
           facilityName={facility?.name ?? null}
-          issuedByName={issuedBy}
+          issuedByName=""
         />
       </div>
     </>

@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { limitText } from "@/lib/conformity";
+import { PrintButton } from "@/components/print-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -47,93 +48,123 @@ export default async function PortalReportPage({
     conformed && judged.length > 0 && judged.every((p) => p.conformity === "CONFORM");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/portal" className="text-sm underline">
-          ← Back
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">Report {report.reportNo}</h1>
-        <p className="text-sm text-muted-foreground">
-          Approved {formatDateTime(report.approvedAt)}
-        </p>
-      </div>
+    <>
+      {/* Print just the report, isolated from the portal header/nav. */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #portal-report, #portal-report * { visibility: visible !important; }
+          #portal-report { position: absolute; left: 0; top: 0; width: 100%; }
+          @page { size: A4; margin: 14mm; }
+        }
+      `}</style>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sample</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm">
-          <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
-            <span className="text-muted-foreground">Lab ID</span>
-            <span className="font-mono">{s.labId}</span>
-          </div>
-          <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
-            <span className="text-muted-foreground">Sample type</span>
-            <span>{s.sampleType}</span>
-          </div>
-          {conformed && s.standard && (
-            <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
-              <span className="text-muted-foreground">Conformed to</span>
-              <span>{s.standard.name}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between print:hidden">
+          <Link href="/portal" className="text-sm underline">
+            ← Back
+          </Link>
+          <PrintButton />
+        </div>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Results</CardTitle>
-          {conformed && (
-            <Badge variant={overallConforms ? "default" : "destructive"}>
-              {overallConforms ? "PASS" : "FAIL"}
-            </Badge>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Parameter</TableHead>
-                <TableHead>Result</TableHead>
-                <TableHead>Unit</TableHead>
-                {conformed && <TableHead>Limit</TableHead>}
-                {conformed && <TableHead>Conformity</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {s.parameters.map((sp) => (
-                <TableRow key={sp.id}>
-                  <TableCell>{sp.parameter.name}</TableCell>
-                  <TableCell className="font-medium">{sp.resultValue ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {sp.unit ?? sp.parameter.unit ?? "—"}
-                  </TableCell>
-                  {conformed && (
-                    <TableCell className="text-muted-foreground">
-                      {limitText(sp.limitMin, sp.limitMax, sp.unit ?? sp.parameter.unit) || "—"}
-                    </TableCell>
-                  )}
-                  {conformed && (
-                    <TableCell>
-                      {sp.conformity === "CONFORM" ? (
-                        <Badge>PASS</Badge>
-                      ) : sp.conformity === "NON_CONFORM" ? (
-                        <Badge variant="destructive">FAIL</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
+        <div id="portal-report" className="space-y-6">
+          {/* Shown only when printing, so the printout is branded. */}
+          <div className="hidden text-center print:block">
+            <div className="text-xl font-bold">BECS Analytics</div>
+            <div className="text-sm">Test Report</div>
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-semibold">Report {report.reportNo}</h1>
+            <p className="text-sm text-muted-foreground">
+              Approved {formatDateTime(report.approvedAt)}
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Sample</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm">
+              <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
+                <span className="text-muted-foreground">Lab ID</span>
+                <span className="font-mono">{s.labId}</span>
+              </div>
+              <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
+                <span className="text-muted-foreground">Sample type</span>
+                <span>{s.sampleType}</span>
+              </div>
+              {conformed && s.standard && (
+                <div className="grid grid-cols-[160px_1fr] gap-2 py-1">
+                  <span className="text-muted-foreground">Conformed to</span>
+                  <span>{s.standard.name}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">Results</CardTitle>
+              {conformed && (
+                <Badge variant={overallConforms ? "default" : "destructive"}>
+                  {overallConforms ? "PASS" : "FAIL"}
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Parameter</TableHead>
+                    <TableHead>Result</TableHead>
+                    <TableHead>Unit</TableHead>
+                    {conformed && <TableHead>Limit</TableHead>}
+                    {conformed && <TableHead>Conformity</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {s.parameters.map((sp) => (
+                    <TableRow key={sp.id}>
+                      <TableCell>{sp.parameter.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {sp.resultValue ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {sp.unit ?? sp.parameter.unit ?? "—"}
+                      </TableCell>
+                      {conformed && (
+                        <TableCell className="text-muted-foreground">
+                          {limitText(
+                            sp.limitMin,
+                            sp.limitMax,
+                            sp.unit ?? sp.parameter.unit,
+                          ) || "—"}
+                        </TableCell>
                       )}
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                      {conformed && (
+                        <TableCell>
+                          {sp.conformity === "CONFORM" ? (
+                            <Badge>PASS</Badge>
+                          ) : sp.conformity === "NON_CONFORM" ? (
+                            <Badge variant="destructive">FAIL</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
-      <p className="text-xs text-muted-foreground">
-        Document ref: {report.qrText}
-      </p>
-    </div>
+          <p className="text-xs text-muted-foreground">
+            Document ref: {report.qrText}
+          </p>
+        </div>
+      </div>
+    </>
   );
 }

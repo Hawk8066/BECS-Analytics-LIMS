@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CheckAnswer, ExpiryCheck, type ReceiptStatus } from "@prisma/client";
+import {
+  CheckAnswer,
+  ExpiryCheck,
+  type InspectionSection,
+  type ReceiptStatus,
+} from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import {
@@ -65,20 +70,39 @@ export async function submitInspection(formData: FormData): Promise<void> {
   if (!receipt) throw new Error("Receipt not found.");
 
   const text = (name: string) => String(formData.get(name) || "").trim() || null;
-  const data = {
+
+  // One checked row per delivered item (item_<i>_*). Section decides which
+  // check fields are meaningful; the rest come back null.
+  const SECTIONS = ["CHEMICAL", "EQUIPMENT", "MATERIAL"];
+  const count = parseInt(String(formData.get("itemCount") || "0"), 10) || 0;
+  const items: {
+    poLineId: string | null;
+    name: string;
+    section: InspectionSection;
+    specs: CheckAnswer | null;
+    quantity: CheckAnswer | null;
+    packing: CheckAnswer | null;
+    expiry: ExpiryCheck | null;
+    storage: CheckAnswer | null;
+  }[] = [];
+  for (let i = 0; i < count; i++) {
+    const name = String(formData.get(`item_${i}_name`) || "").trim();
+    const section = String(formData.get(`item_${i}_section`) || "").toUpperCase();
+    if (!name || !SECTIONS.includes(section)) continue;
+    items.push({
+      poLineId: String(formData.get(`item_${i}_poLineId`) || "") || null,
+      name,
+      section: section as InspectionSection,
+      specs: toAns(formData.get(`item_${i}_specs`)),
+      quantity: toAns(formData.get(`item_${i}_quantity`)),
+      packing: toAns(formData.get(`item_${i}_packing`)),
+      expiry: toExp(formData.get(`item_${i}_expiry`)),
+      storage: toAns(formData.get(`item_${i}_storage`)),
+    });
+  }
+
+  const header = {
     supplier: text("supplier"),
-    chemicalItems: text("chemicalItems"),
-    equipmentItems: text("equipmentItems"),
-    materialItems: text("materialItems"),
-    chemSpecs: toAns(formData.get("chemSpecs")),
-    chemQuantity: toAns(formData.get("chemQuantity")),
-    chemPacking: toAns(formData.get("chemPacking")),
-    chemExpiry: toExp(formData.get("chemExpiry")),
-    chemStorage: toAns(formData.get("chemStorage")),
-    equipSpecs: toAns(formData.get("equipSpecs")),
-    equipPacking: toAns(formData.get("equipPacking")),
-    matSpecs: toAns(formData.get("matSpecs")),
-    matQuantity: toAns(formData.get("matQuantity")),
     notes: text("notes"),
     decision,
     inspectedById: actor.id,
@@ -87,8 +111,8 @@ export async function submitInspection(formData: FormData): Promise<void> {
   await prisma.$transaction([
     prisma.incomingInspection.upsert({
       where: { goodsReceiptId: receiptId },
-      update: data,
-      create: { goodsReceiptId: receiptId, ...data },
+      update: { ...header, items: { deleteMany: {}, create: items } },
+      create: { goodsReceiptId: receiptId, ...header, items: { create: items } },
     }),
     prisma.goodsReceipt.update({
       where: { id: receiptId },
