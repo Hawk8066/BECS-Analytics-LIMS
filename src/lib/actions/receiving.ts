@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { CheckAnswer, ExpiryCheck, type ReceiptStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import {
@@ -10,6 +11,15 @@ import {
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { nextNumber } from "@/lib/numbering";
+
+const toAns = (v: FormDataEntryValue | null): CheckAnswer | null => {
+  const s = String(v ?? "");
+  return s in CheckAnswer ? (s as CheckAnswer) : null;
+};
+const toExp = (v: FormDataEntryValue | null): ExpiryCheck | null => {
+  const s = String(v ?? "");
+  return s in ExpiryCheck ? (s as ExpiryCheck) : null;
+};
 
 // Purchase Officer marks a delivery received against a PO (partial OK, BR-19).
 export async function markReceived(formData: FormData): Promise<void> {
@@ -34,28 +44,68 @@ export async function markReceived(formData: FormData): Promise<void> {
   revalidatePath(`/app/procurement/${po.prId}`);
 }
 
-// OM (Lahore) / Lab Manager (RYK) inspects a delivery: accept or reject (BR-11).
-export async function inspectReceipt(formData: FormData): Promise<void> {
+// OM (Lahore) / Lab Manager (RYK) inspects a delivery against the Incoming
+// Inspection Checklist (BECS/FF/606/09): records the per-section checks and an
+// accept/reject decision that sets the receipt status (BR-11).
+export async function submitInspection(formData: FormData): Promise<void> {
   const actor = await requireUser();
   if (!canInspectGoods(actor.designation))
     throw new Error("Not permitted to inspect goods.");
 
-  const id = String(formData.get("receiptId"));
-  const decision = String(formData.get("decision"));
-  if (decision !== "ACCEPTED" && decision !== "REJECTED")
+  const receiptId = String(formData.get("receiptId"));
+  const decisionRaw = String(formData.get("decision"));
+  if (decisionRaw !== "ACCEPTED" && decisionRaw !== "REJECTED")
     throw new Error("Invalid decision.");
+  const decision = decisionRaw as ReceiptStatus;
 
-  const receipt = await prisma.goodsReceipt.update({
-    where: { id },
-    data: { status: decision, inspectedById: actor.id, inspectedAt: new Date() },
-    include: { po: true },
+  const receipt = await prisma.goodsReceipt.findUnique({
+    where: { id: receiptId },
+    include: { po: { select: { prId: true } } },
   });
+  if (!receipt) throw new Error("Receipt not found.");
+
+  const text = (name: string) => String(formData.get(name) || "").trim() || null;
+  const data = {
+    supplier: text("supplier"),
+    chemicalItems: text("chemicalItems"),
+    equipmentItems: text("equipmentItems"),
+    materialItems: text("materialItems"),
+    chemSpecs: toAns(formData.get("chemSpecs")),
+    chemQuantity: toAns(formData.get("chemQuantity")),
+    chemPacking: toAns(formData.get("chemPacking")),
+    chemExpiry: toExp(formData.get("chemExpiry")),
+    chemStorage: toAns(formData.get("chemStorage")),
+    equipSpecs: toAns(formData.get("equipSpecs")),
+    equipPacking: toAns(formData.get("equipPacking")),
+    matSpecs: toAns(formData.get("matSpecs")),
+    matQuantity: toAns(formData.get("matQuantity")),
+    notes: text("notes"),
+    decision,
+    inspectedById: actor.id,
+  };
+
+  await prisma.$transaction([
+    prisma.incomingInspection.upsert({
+      where: { goodsReceiptId: receiptId },
+      update: data,
+      create: { goodsReceiptId: receiptId, ...data },
+    }),
+    prisma.goodsReceipt.update({
+      where: { id: receiptId },
+      data: {
+        status: decision,
+        inspectedById: actor.id,
+        inspectedAt: new Date(),
+      },
+    }),
+  ]);
+
   await writeAudit({
     actorId: actor.id,
     action: decision === "ACCEPTED" ? "APPROVE" : "REJECT",
     entityType: "GoodsReceipt",
-    entityId: id,
-    after: { status: decision },
+    entityId: receiptId,
+    after: { decision },
   });
   revalidatePath(`/app/procurement/${receipt.po.prId}`);
 }

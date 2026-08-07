@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { canAccessPR } from "@/lib/procurement/access";
 import { formatDate } from "@/lib/format";
 import { designationLabel } from "@/lib/labels";
+import { packQtyLabel } from "@/lib/procurement/format";
 import { PrintButton } from "./print-button";
 
 // Minimum blank rows so the printed table matches the paper requisition.
@@ -132,8 +133,7 @@ export default async function PRPrintPage({
                     {l.specification ?? ""}
                   </td>
                   <td className="border border-black px-2 py-1 align-top">
-                    {l.quantity}
-                    {l.unit ? ` ${l.unit}` : ""}
+                    {packQtyLabel(l.quantity, l.packSize, l.unit)}
                   </td>
                   <td className="border border-black px-2 py-1 align-top">
                     {l.justification ?? ""}

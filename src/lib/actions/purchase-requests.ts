@@ -24,6 +24,7 @@ export async function createPR(
   const descriptions = formData.getAll("description").map(String);
   const specifications = formData.getAll("specification").map(String);
   const categories = formData.getAll("category").map(String);
+  const packSizes = formData.getAll("packSize").map(String);
   const quantities = formData.getAll("quantity").map(String);
   const units = formData.getAll("unit").map(String);
   const justifications = formData.getAll("justification").map(String);
@@ -34,6 +35,7 @@ export async function createPR(
     specification: string | null;
     category: ItemCategory;
     path: ReturnType<typeof pathForCategory>;
+    packSize: string | null;
     quantity: number;
     unit: string | null;
     justification: string | null;
@@ -49,6 +51,7 @@ export async function createPR(
       specification: specifications[i]?.trim() || null,
       category: category as ItemCategory,
       path: pathForCategory(category as ItemCategory),
+      packSize: packSizes[i]?.trim() || null,
       quantity: parseInt(quantities[i] || "1", 10) || 1,
       unit: units[i]?.trim() || null,
       justification: justifications[i]?.trim() || null,

@@ -21,13 +21,12 @@ import {
 } from "@/lib/actions/purchase-requests";
 import { generatePO } from "@/lib/actions/procurement";
 import { canAccessPR } from "@/lib/procurement/access";
-import {
-  inspectReceipt,
-  issueGRN,
-  markReceived,
-} from "@/lib/actions/receiving";
+import { issueGRN, markReceived } from "@/lib/actions/receiving";
+import { packQtyLabel } from "@/lib/procurement/format";
+import { inspectionSection } from "@/lib/procurement/inspection";
 import { AddQuotationButton } from "./add-quotation-button";
 import { Comparative } from "./comparative";
+import { InspectButton } from "./inspect-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -66,8 +65,11 @@ export default async function PRDetailPage({
       pos: {
         include: {
           vendor: true,
-          lines: true,
-          receipts: { include: { grn: true }, orderBy: { receivedAt: "asc" } },
+          lines: { include: { prLine: { select: { category: true } } } },
+          receipts: {
+            include: { grn: true, inspection: { select: { id: true } } },
+            orderBy: { receivedAt: "asc" },
+          },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -211,6 +213,7 @@ export default async function PRDetailPage({
                       id: l.id,
                       description: l.description,
                       specification: l.specification,
+                      packSize: l.packSize,
                       quantity: l.quantity,
                       unit: l.unit,
                       selectionNote: l.selectionNote,
@@ -235,6 +238,8 @@ export default async function PRDetailPage({
                         lines={pr.lines.map((l) => ({
                           id: l.id,
                           description: l.description,
+                          specification: l.specification,
+                          packSize: l.packSize,
                           quantity: l.quantity,
                           unit: l.unit,
                         }))}
@@ -313,16 +318,25 @@ export default async function PRDetailPage({
             {pr.pos.length > 0 && (
               <div className="space-y-2 border-t pt-3">
                 {pr.pos.map((po) => (
-                  <div key={po.id} className="rounded-md border p-3 text-sm">
-                    <div className="font-medium">
-                      PO <span className="font-mono">{po.poNo}</span> ·{" "}
-                      <Badge variant="secondary">{po.status}</Badge>
+                  <Link
+                    key={po.id}
+                    href={`/app/procurement/po/${po.id}`}
+                    className="block rounded-md border p-3 text-sm transition-colors hover:bg-muted/40"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">
+                        PO <span className="font-mono">{po.poNo}</span> ·{" "}
+                        <Badge variant="secondary">{po.status}</Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        Open / print →
+                      </span>
                     </div>
                     <div className="text-muted-foreground">
                       {po.vendor?.company ?? "—"} · {pkr(po.amount)} ·{" "}
                       {po.lines.length} item{po.lines.length === 1 ? "" : "s"}
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -336,7 +350,18 @@ export default async function PRDetailPage({
             <CardTitle className="text-base">Goods Receiving</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {pr.pos.map((po) => (
+            {pr.pos.map((po) => {
+              // Group the delivery's items by inspection-checklist section.
+              const secItems = {
+                chemical: [] as string[],
+                equipment: [] as string[],
+                material: [] as string[],
+              };
+              for (const l of po.lines)
+                secItems[inspectionSection(l.prLine.category)].push(
+                  l.description,
+                );
+              return (
               <div key={po.id} className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-medium">
@@ -392,50 +417,41 @@ export default async function PRDetailPage({
                             {r.grn?.grnNo ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {r.status === "PENDING_INSPECTION" &&
-                              canInspectGoods(user.designation) && (
-                                <form
-                                  action={inspectReceipt}
-                                  className="flex justify-end gap-2"
+                            <div className="flex items-center justify-end gap-2">
+                              {r.status === "PENDING_INSPECTION" &&
+                                canInspectGoods(user.designation) && (
+                                  <InspectButton
+                                    receiptId={r.id}
+                                    supplier={po.vendor?.company ?? ""}
+                                    prNo={pr.prNo}
+                                    chemicalItems={secItems.chemical.join(", ")}
+                                    equipmentItems={secItems.equipment.join(", ")}
+                                    materialItems={secItems.material.join(", ")}
+                                  />
+                                )}
+                              {r.inspection && (
+                                <Link
+                                  href={`/app/procurement/inspection/${r.id}`}
+                                  className="text-xs text-muted-foreground underline"
                                 >
-                                  <input
-                                    type="hidden"
-                                    name="receiptId"
-                                    value={r.id}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    type="submit"
-                                    name="decision"
-                                    value="ACCEPTED"
-                                  >
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    type="submit"
-                                    name="decision"
-                                    value="REJECTED"
-                                  >
-                                    Reject
-                                  </Button>
-                                </form>
+                                  Checklist
+                                </Link>
                               )}
-                            {r.status === "ACCEPTED" &&
-                              !r.grn &&
-                              canManageStore(user.designation) && (
-                                <form action={issueGRN}>
-                                  <input
-                                    type="hidden"
-                                    name="receiptId"
-                                    value={r.id}
-                                  />
-                                  <Button size="sm" type="submit">
-                                    Issue GRN
-                                  </Button>
-                                </form>
-                              )}
+                              {r.status === "ACCEPTED" &&
+                                !r.grn &&
+                                canManageStore(user.designation) && (
+                                  <form action={issueGRN}>
+                                    <input
+                                      type="hidden"
+                                      name="receiptId"
+                                      value={r.id}
+                                    />
+                                    <Button size="sm" type="submit">
+                                      Issue GRN
+                                    </Button>
+                                  </form>
+                                )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -443,7 +459,8 @@ export default async function PRDetailPage({
                   </Table>
                 )}
               </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
@@ -476,8 +493,7 @@ export default async function PRDetailPage({
                       {l.specification || "—"}
                     </TableCell>
                     <TableCell>
-                      {l.quantity}
-                      {l.unit ? ` ${l.unit}` : ""}
+                      {packQtyLabel(l.quantity, l.packSize, l.unit)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {l.category}

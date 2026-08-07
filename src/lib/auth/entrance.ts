@@ -29,6 +29,15 @@ export function entranceOf(
   }
 }
 
+// The landing page each designation is sent to once authenticated. Kept in step
+// with the same routing in auth.config.ts (authorized callback) and the app layout.
+export function homePathFor(designation: Designation): string {
+  if (designation === "CLIENT") return "/portal";
+  if (designation === "VENDOR") return "/vendor";
+  if (designation === "OUTSOURCE_LAB") return "/outsource";
+  return "/app";
+}
+
 export const ENTRANCE_LABELS: Record<Entrance, string> = {
   "lahore-lab": "Lahore Lab",
   "ryk-lab": "RYK Lab",

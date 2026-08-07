@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canAccessPR } from "@/lib/procurement/access";
+import { specDiffers } from "@/lib/procurement/spec";
+import { packQtyLabel } from "@/lib/procurement/format";
 import { formatDate } from "@/lib/format";
 import { PrintButton } from "../print/print-button";
 
@@ -167,17 +169,29 @@ export default async function ComparativePrintPage({
                         {l.quantity ? (
                           <span className="text-neutral-600">
                             {" "}
-                            ({l.quantity}
-                            {l.unit ? ` ${l.unit}` : ""})
+                            ({packQtyLabel(l.quantity, l.packSize, l.unit)})
                           </span>
+                        ) : null}
+                        {l.specification ? (
+                          <div className="text-[10px] text-neutral-600">
+                            Requested: {l.specification}
+                          </div>
                         ) : null}
                       </td>
                       {quotations.map((q, qIdx) => {
                         const c = cellOf(qIdx, l.id);
+                        const differs =
+                          c && specDiffers(c.specification, l.specification);
                         return (
                           <Fragment key={q.id}>
                             <td className="border border-black px-2 py-1">
                               {c?.specification ?? ""}
+                              {differs ? (
+                                <span className="text-[10px] italic text-neutral-600">
+                                  {" "}
+                                  (≠ requested)
+                                </span>
+                              ) : null}
                             </td>
                             <td className="border border-black px-2 py-1 text-right tabular-nums">
                               {c ? pkr(c.rate) : ""}

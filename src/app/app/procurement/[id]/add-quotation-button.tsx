@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addQuotation } from "@/lib/actions/procurement";
+import { packQtyLabel } from "@/lib/procurement/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -9,6 +10,8 @@ import { Modal } from "@/components/ui/modal";
 interface Line {
   id: string;
   description: string;
+  specification: string | null; // the spec the PR requested
+  packSize: string | null;
   quantity: number;
   unit: string | null;
 }
@@ -87,14 +90,19 @@ export function AddQuotationButton({
                       <td className="px-2 py-1.5 text-muted-foreground">
                         {i + 1}
                       </td>
-                      <td className="px-2 py-1.5">{l.description}</td>
+                      <td className="px-2 py-1.5">
+                        <div>{l.description}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Requested: {l.specification || "—"}
+                        </div>
+                      </td>
                       <td className="px-2 py-1.5 text-muted-foreground">
-                        {l.quantity}
-                        {l.unit ? ` ${l.unit}` : ""}
+                        {packQtyLabel(l.quantity, l.packSize, l.unit)}
                       </td>
                       <td className="px-2 py-1.5">
                         <Input
                           name={`spec_${l.id}`}
+                          defaultValue={l.specification ?? ""}
                           placeholder="Grade / brand"
                           className="h-8"
                         />
@@ -116,8 +124,10 @@ export function AddQuotationButton({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Leave a rate blank for items this vendor did not quote. The total is
-              computed as the sum of rate × quantity.
+              Offered specification is pre-filled with what the PR requested —
+              change it only where this vendor offers something different. Leave a
+              rate blank for items this vendor did not quote; the total is the sum
+              of rate × quantity.
             </p>
 
             <div className="flex justify-end gap-2">

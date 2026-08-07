@@ -200,6 +200,7 @@ export async function generatePO(formData: FormData): Promise<void> {
     lines: {
       prLineId: string;
       description: string;
+      packSize: string | null;
       quantity: number;
       unit: string | null;
       rate: number | null;
@@ -225,6 +226,7 @@ export async function generatePO(formData: FormData): Promise<void> {
         return {
           prLineId: l.id,
           description: l.description,
+          packSize: l.packSize,
           quantity: l.quantity,
           unit: l.unit,
           rate: it.rate,
@@ -259,6 +261,7 @@ export async function generatePO(formData: FormData): Promise<void> {
       lines: pr.lines.map((l) => ({
         prLineId: l.id,
         description: l.description,
+        packSize: l.packSize,
         quantity: l.quantity,
         unit: l.unit,
         rate: null,

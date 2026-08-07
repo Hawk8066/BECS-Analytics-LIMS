@@ -2,6 +2,8 @@
 
 import { Fragment } from "react";
 import { selectComparative } from "@/lib/actions/procurement";
+import { specDiffers } from "@/lib/procurement/spec";
+import { packQtyLabel } from "@/lib/procurement/format";
 import { Button } from "@/components/ui/button";
 
 interface Cell {
@@ -15,6 +17,7 @@ interface Line {
   id: string;
   description: string;
   specification: string | null;
+  packSize: string | null;
   quantity: number;
   unit: string | null;
   selectionNote: string | null;
@@ -59,9 +62,14 @@ export function Comparative({
     for (const q of quotations) if (q.cells[lineId]?.selected) return q.vendor;
     return null;
   };
+  // Any vendor offering a spec different from what the PR requested?
+  const anyDiff = lines.some((l) =>
+    quotations.some((q) => specDiffers(q.cells[l.id]?.specification, l.specification)),
+  );
 
   const grid = (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-md border">
       <table className="w-full border-collapse text-sm">
         <thead className="bg-muted/40 text-xs">
           <tr>
@@ -117,8 +125,7 @@ export function Comparative({
                 <td className="border px-2 py-1.5">
                   <div className="font-medium">{l.description}</div>
                   <div className="text-xs text-muted-foreground">
-                    {l.quantity}
-                    {l.unit ? ` ${l.unit}` : ""}
+                    {packQtyLabel(l.quantity, l.packSize, l.unit)}
                     {l.specification ? ` · ${l.specification}` : ""}
                   </div>
                 </td>
@@ -132,6 +139,11 @@ export function Comparative({
                         }`}
                       >
                         {c?.specification || (c ? "—" : "")}
+                        {c && specDiffers(c.specification, l.specification) && (
+                          <span className="ml-1 whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800">
+                            differs
+                          </span>
+                        )}
                       </td>
                       <td
                         className={`border px-2 py-1.5 text-right tabular-nums ${
@@ -200,6 +212,16 @@ export function Comparative({
           </tr>
         </tbody>
       </table>
+      </div>
+      {anyDiff && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-800">
+            differs
+          </span>
+          = this vendor&apos;s offered specification isn&apos;t what the PR
+          requested. Note why in the justification when awarding it.
+        </p>
+      )}
     </div>
   );
 

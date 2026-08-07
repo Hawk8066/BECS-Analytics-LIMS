@@ -1177,6 +1177,7 @@ model PurchaseOrderLine {
   prLineId    String
   prLine      PRLine        @relation(fields: [prLineId], references: [id])
   description String
+  packSize    String? // pack size value, e.g. "500" (measure unit in `unit`)
   quantity    Int
   unit        String?
   rate        Int? // PKR paisa, per unit (null when no per-line rate)
@@ -1257,9 +1258,56 @@ model GoodsReceipt {
   inspectedAt  DateTime?
   note         String?
 
-  grn GRN?
+  grn        GRN?
+  inspection IncomingInspection?
 
   @@index([poId])
+}
+
+// Answer to a yes/no inspection check (NA = not applicable / not checked).
+enum CheckAnswer {
+  YES
+  NO
+  NA
+}
+
+// Expiry-date check outcome (chemicals).
+enum ExpiryCheck {
+  OK
+  EXPIRED
+  NA
+}
+
+// Incoming Inspection Checklist (BECS/FF/606/09). One per GoodsReceipt: the
+// store officer / lab manager records the per-section checks and the accept/
+// reject decision that drives the receipt status. Item lists snapshot the
+// delivery's items grouped by section.
+model IncomingInspection {
+  id             String       @id @default(uuid())
+  goodsReceiptId String       @unique
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+
+  supplier       String? // vendor name at inspection time
+  chemicalItems  String?
+  equipmentItems String?
+  materialItems  String?
+
+  chemSpecs    CheckAnswer?
+  chemQuantity CheckAnswer?
+  chemPacking  CheckAnswer?
+  chemExpiry   ExpiryCheck?
+  chemStorage  CheckAnswer?
+
+  equipSpecs   CheckAnswer?
+  equipPacking CheckAnswer?
+
+  matSpecs    CheckAnswer?
+  matQuantity CheckAnswer?
+
+  notes         String?
+  decision      ReceiptStatus // ACCEPTED / REJECTED chosen by the inspector
+  inspectedById String?
+  createdAt     DateTime      @default(now())
 }
 
 // Goods Receiving Note — issued by the Store In-charge after accepted inspection
@@ -1612,8 +1660,9 @@ model PRLine {
   specification String? // technical spec / grade / model
   category      ItemCategory
   path          ProcurementPath
+  packSize      String? // pack/packing size value, e.g. "500" (measure unit in `unit`)
   quantity      Int             @default(1)
-  unit          String?
+  unit          String? // measure unit, e.g. "mL", "g", "pcs"
   justification String? // why the item is needed
   priority      String? // Low | Normal | High | Urgent
   selectionNote String? // Comparative award justification (why this vendor for this line)

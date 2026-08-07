@@ -25,7 +25,8 @@ export default async function NewPRPage() {
   const itemOpts = items.map((it) => ({
     name: it.name,
     category: it.category,
-    spec: [it.pack, it.make, it.model].filter(Boolean).join(", "),
+    pack: it.pack ?? "",
+    spec: [it.make, it.model].filter(Boolean).join(", "),
   }));
 
   return (

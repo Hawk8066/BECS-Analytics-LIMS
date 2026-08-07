@@ -39,13 +39,22 @@ const GENERAL_CATS: Cat[] = [
 ];
 
 const COLS =
-  "grid-cols-[32px_150px_minmax(150px,1.4fr)_minmax(120px,1.1fr)_58px_70px_minmax(120px,1fr)_104px_30px]";
+  "grid-cols-[32px_150px_minmax(140px,1.3fr)_minmax(110px,1fr)_66px_60px_52px_minmax(110px,1fr)_96px_30px]";
+
+// Split a catalog pack string like "500 mL" into its size ("500") and measure
+// unit ("mL"), so both auto-fill their own fields.
+function splitPack(pack: string): { size: string; unit: string } {
+  const m = pack.trim().match(/^([\d.,]+)\s*(.*)$/);
+  return m ? { size: m[1], unit: m[2].trim() } : { size: pack.trim(), unit: "" };
+}
 
 interface Row {
   key: number;
   catKey: string;
   description: string;
   specification: string;
+  packSize: string;
+  unit: string;
 }
 
 let rowSeq = 0;
@@ -54,13 +63,15 @@ const makeRow = (cats: Cat[]): Row => ({
   catKey: cats[0].key,
   description: "",
   specification: "",
+  packSize: "",
+  unit: "",
 });
 
 export function PRForm({
   items,
 }: {
-  /** Inventory catalog to pick from: name, its classification, and a spec hint. */
-  items: { name: string; category: string; spec: string }[];
+  /** Inventory catalog to pick from: name, classification, pack size + spec hint. */
+  items: { name: string; category: string; pack: string; spec: string }[];
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     createPR,
@@ -89,6 +100,10 @@ export function PRForm({
     () => new Map(items.map((it) => [`${it.category}:${it.name}`, it.spec])),
     [items],
   );
+  const packByItem = useMemo(
+    () => new Map(items.map((it) => [`${it.category}:${it.name}`, it.pack])),
+    [items],
+  );
   const invCats = useMemo(
     () =>
       [...new Set([...LAB_CATS, ...GENERAL_CATS].map((c) => c.inv))].filter(
@@ -108,7 +123,7 @@ export function PRForm({
     return (
       <div className="space-y-3">
         <div className="overflow-x-auto rounded-md border">
-          <div className="min-w-[920px]">
+          <div className="min-w-[1000px]">
             <div
               className={`grid ${COLS} gap-2 border-b bg-muted/40 p-2 text-xs font-medium text-muted-foreground`}
             >
@@ -116,8 +131,9 @@ export function PRForm({
               <span>Category</span>
               <span>Item / service</span>
               <span>Specification</span>
-              <span>Qty</span>
+              <span>Pack size</span>
               <span>Unit</span>
+              <span>Qty</span>
               <span>Justification</span>
               <span>Priority</span>
               <span />
@@ -149,11 +165,17 @@ export function PRForm({
                     value={row.description}
                     onChange={(e) => {
                       const name = e.target.value;
-                      const spec = cat.inv ? specByItem.get(`${cat.inv}:${name}`) : undefined;
-                      patch(
-                        row.key,
-                        spec ? { description: name, specification: spec } : { description: name },
-                      );
+                      const inv = cat.inv;
+                      const spec = inv ? specByItem.get(`${inv}:${name}`) : undefined;
+                      const packRaw = inv ? packByItem.get(`${inv}:${name}`) : undefined;
+                      const p: Partial<Row> = { description: name };
+                      if (spec) p.specification = spec;
+                      if (packRaw) {
+                        const parsed = splitPack(packRaw);
+                        p.packSize = parsed.size;
+                        if (parsed.unit) p.unit = parsed.unit;
+                      }
+                      patch(row.key, p);
                     }}
                     placeholder={cat.inv ? "Pick or type item" : "Item / service"}
                   />
@@ -163,8 +185,19 @@ export function PRForm({
                     onChange={(e) => patch(row.key, { specification: e.target.value })}
                     placeholder="Grade / model / spec"
                   />
+                  <Input
+                    name="packSize"
+                    value={row.packSize}
+                    onChange={(e) => patch(row.key, { packSize: e.target.value })}
+                    placeholder="e.g. 500"
+                  />
+                  <Input
+                    name="unit"
+                    value={row.unit}
+                    onChange={(e) => patch(row.key, { unit: e.target.value })}
+                    placeholder="e.g. mL"
+                  />
                   <Input name="quantity" type="number" min="1" defaultValue="1" />
-                  <Input name="unit" placeholder="e.g. pcs" />
                   <Input name="justification" placeholder="Why needed" />
                   <select
                     name="priority"
@@ -237,8 +270,9 @@ export function PRForm({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Lab items are picked from the catalog (specification auto-fills); general
-        supplies are typed. Category routes the request — stationery, sanitary,
+        Lab items are picked from the catalog (pack size, unit and specification
+        auto-fill — e.g. a 500&nbsp;mL bottle, quantity 1); general supplies are
+        typed. Category routes the request — stationery, sanitary,
         furniture, PPE and utility are PO-only; everything else needs quotations.
         Only rows with an item are saved.
       </p>
