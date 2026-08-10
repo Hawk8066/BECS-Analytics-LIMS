@@ -286,6 +286,7 @@ function StorePanel({
   subStores,
   storeName,
   register,
+  itemOptions,
   isManagement,
   canDecide,
   showForm,
@@ -295,6 +296,13 @@ function StorePanel({
   subStores: StoreOpt[];
   storeName: Map<string, string>;
   register: RegisterItem[];
+  /** Items available to issue (the main store's stock) with balance + details. */
+  itemOptions: {
+    name: string;
+    pack: string | null;
+    subCategory: string | null;
+    quantity: number | null;
+  }[];
   isManagement: boolean;
   canDecide: boolean;
   showForm: boolean;
@@ -360,11 +368,37 @@ function StorePanel({
               </div>
               <div className="grid gap-1.5">
                 <label className="text-xs text-muted-foreground">Item</label>
-                <input
-                  name="description"
-                  required
-                  className="h-9 rounded-md border bg-transparent px-2 text-sm"
-                />
+                {itemOptions.length > 0 ? (
+                  <select
+                    name="description"
+                    required
+                    defaultValue=""
+                    className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                  >
+                    <option value="" disabled>
+                      Select…
+                    </option>
+                    {itemOptions.map((it) => (
+                      <option key={it.name} value={it.name}>
+                        {it.name}
+                        {it.pack ? ` · ${it.pack}` : ""}
+                        {it.subCategory ? ` · ${it.subCategory}` : ""}
+                        {" · "}
+                        {it.quantity == null
+                          ? "qty —"
+                          : it.quantity === 0
+                            ? "out of stock"
+                            : `${it.quantity} available`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    name="description"
+                    required
+                    className="h-9 rounded-md border bg-transparent px-2 text-sm"
+                  />
+                )}
               </div>
               <div className="grid gap-1.5">
                 <label className="text-xs text-muted-foreground">Qty</label>
@@ -492,6 +526,16 @@ export default async function InventoryPage() {
   const ryk = inSet(rykIds);
   const mainBalances = balances.filter((b) => mainIds.has(b.storeId));
   const mainRegister = registerItems.filter((i) => mainIds.has(i.storeId));
+  // Items an issue request can draw — the main store's stock, selectable by name
+  // and shown with their packing size, category and available balance.
+  const mainItems = [...new Map(mainRegister.map((i) => [i.name, i])).values()]
+    .map((i) => ({
+      name: i.name,
+      pack: i.pack,
+      subCategory: i.subCategory,
+      quantity: i.quantity,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const tabs: TabItem[] = [
     {
@@ -505,6 +549,7 @@ export default async function InventoryPage() {
           subStores={lahoreStores}
           storeName={storeName}
           register={lahore.register}
+          itemOptions={mainItems}
           isManagement={isManagement}
           canDecide={canDecide}
           showForm
@@ -522,6 +567,7 @@ export default async function InventoryPage() {
           subStores={rykStores}
           storeName={storeName}
           register={ryk.register}
+          itemOptions={mainItems}
           isManagement={isManagement}
           canDecide={canDecide}
           showForm
@@ -539,6 +585,7 @@ export default async function InventoryPage() {
           subStores={[]}
           storeName={storeName}
           register={mainRegister}
+          itemOptions={mainItems}
           isManagement={isManagement}
           canDecide={canDecide}
           showForm={false}

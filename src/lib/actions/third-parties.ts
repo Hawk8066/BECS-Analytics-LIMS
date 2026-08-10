@@ -29,6 +29,7 @@ const ThirdPartySchema = z.object({
   email: z.string().optional(),
   ntn: z.string().optional(),
   stn: z.string().optional(),
+  referenceClientId: z.string().optional(),
 });
 
 function dataFrom(d: z.infer<typeof ThirdPartySchema>) {
@@ -45,6 +46,7 @@ function dataFrom(d: z.infer<typeof ThirdPartySchema>) {
     email: d.email || null,
     ntn: d.ntn || null,
     stn: d.stn || null,
+    referenceClientId: d.referenceClientId || null,
   };
 }
 

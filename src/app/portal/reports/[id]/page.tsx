@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { limitText } from "@/lib/conformity";
-import { PrintButton } from "@/components/print-button";
+import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -48,40 +48,28 @@ export default async function PortalReportPage({
     conformed && judged.length > 0 && judged.every((p) => p.conformity === "CONFORM");
 
   return (
-    <>
-      {/* Print just the report, isolated from the portal header/nav. */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #portal-report, #portal-report * { visibility: visible !important; }
-          #portal-report { position: absolute; left: 0; top: 0; width: 100%; }
-          @page { size: A4; margin: 14mm; }
-        }
-      `}</style>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Link href="/portal" className="text-sm underline">
+          ← Back
+        </Link>
+        <Link
+          href={`/portal/reports/${report.id}/print`}
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+        >
+          Print / Save as PDF
+        </Link>
+      </div>
 
       <div className="space-y-6">
-        <div className="flex items-center justify-between print:hidden">
-          <Link href="/portal" className="text-sm underline">
-            ← Back
-          </Link>
-          <PrintButton />
+        <div>
+          <h1 className="text-2xl font-semibold">Report {report.reportNo}</h1>
+          <p className="text-sm text-muted-foreground">
+            Approved {formatDateTime(report.approvedAt)}
+          </p>
         </div>
 
-        <div id="portal-report" className="space-y-6">
-          {/* Shown only when printing, so the printout is branded. */}
-          <div className="hidden text-center print:block">
-            <div className="text-xl font-bold">BECS Analytics</div>
-            <div className="text-sm">Test Report</div>
-          </div>
-
-          <div>
-            <h1 className="text-2xl font-semibold">Report {report.reportNo}</h1>
-            <p className="text-sm text-muted-foreground">
-              Approved {formatDateTime(report.approvedAt)}
-            </p>
-          </div>
-
-          <Card>
+        <Card>
             <CardHeader>
               <CardTitle className="text-base">Sample</CardTitle>
             </CardHeader>
@@ -165,6 +153,5 @@ export default async function PortalReportPage({
           </p>
         </div>
       </div>
-    </>
   );
 }

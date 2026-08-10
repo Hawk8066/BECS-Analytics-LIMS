@@ -2,25 +2,23 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canAccessSample } from "@/lib/samples/access";
 import { limitText } from "@/lib/conformity";
 import { ReportDocument } from "@/components/report/report-document";
-import { PrintButton } from "./print-button";
+import { PrintButton } from "@/components/print-button";
 
-// Blank the document title so the browser's print header (which prints
-// document.title) doesn't stamp "BECS Analytics LIMS" across the top.
+// Blank the tab title so the browser print header doesn't stamp it.
 export const metadata = { title: " " };
 
-export default async function ReportPrintPage({
+export default async function PortalReportPrintPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  if (user.status !== "ACTIVE") redirect("/app/onboarding");
+  if (user.designation !== "CLIENT" || !user.clientId) redirect("/app");
 
+  const { id } = await params;
   const report = await prisma.finalReport.findUnique({
     where: { id },
     include: {
@@ -36,13 +34,10 @@ export default async function ReportPrintPage({
       },
     },
   });
-  if (!report) notFound();
+  // A client may only print a report for their own sample.
+  if (!report || report.sample.clientId !== user.clientId) notFound();
   const sample = report.sample;
-  if (!canAccessSample(user, sample)) notFound();
 
-  // The printed report is the decoded deliverable (client identity is revealed
-  // at approval), so it always shows the client — unlike the blinded testing
-  // views. Access is still gated by canAccessSample above.
   const [client, facility, signatures] = await Promise.all([
     prisma.client.findUnique({
       where: { id: sample.clientId },
@@ -68,8 +63,9 @@ export default async function ReportPrintPage({
     }),
   ]);
 
-  // Signer names for the signature block (verified → OM, approved → COO).
-  const signerIds = [...new Set(signatures.map((s) => s.signerId).filter(Boolean))] as string[];
+  const signerIds = [
+    ...new Set(signatures.map((s) => s.signerId).filter(Boolean)),
+  ] as string[];
   const signers = signerIds.length
     ? await prisma.user.findMany({
         where: { id: { in: signerIds } },
@@ -85,17 +81,12 @@ export default async function ReportPrintPage({
   };
 
   const conformed = !!sample.standardId;
-
-  // "Sample tested" = latest result entry; falls back to the approval date.
   const testedAt =
     sample.parameters
       .map((p) => p.enteredAt)
       .filter((d): d is Date => !!d)
       .sort((a, b) => b.getTime() - a.getTime())[0] ?? report.approvedAt;
 
-  // The report is addressed to the third party when one was chosen (its own name
-  // + address), otherwise the client. Legacy free-text thirdPartyName is a
-  // fallback for samples booked before third parties were entities.
   const tp = sample.thirdParty;
   const addrSource = tp ?? client ?? null;
   const issuedAddress = addrSource
@@ -123,15 +114,23 @@ export default async function ReportPrintPage({
 
   return (
     <>
-      <style>{`@media print { @page { size: A4; margin: 12mm; } }`}</style>
+      {/* Print just the report, isolated from the portal header/nav. */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #report-doc, #report-doc * { visibility: visible !important; }
+          #report-doc { position: absolute; left: 0; top: 0; width: 100%; }
+          @page { size: A4; margin: 12mm; }
+        }
+      `}</style>
 
-      <div className="mx-auto max-w-[850px] space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between print:hidden">
           <Link
-            href={`/app/reports/${report.id}`}
+            href={`/portal/reports/${report.id}`}
             className="text-sm text-muted-foreground underline"
           >
-            ← Back to report
+            ← Back
           </Link>
           <PrintButton />
         </div>

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canRegisterClient } from "@/lib/auth/perms";
-import { buttonVariants } from "@/components/ui/button";
+import { ThirdPartyFormButton } from "./third-party-form-button";
 import {
   Table,
   TableBody,
@@ -18,10 +18,23 @@ export default async function ThirdPartiesPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const thirdParties = await prisma.thirdParty.findMany({
-    where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
-    orderBy: { company: "asc" },
-  });
+  const [thirdParties, clients] = await Promise.all([
+    prisma.thirdParty.findMany({
+      where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
+      include: { referenceClient: { select: { company: true } } },
+      orderBy: { company: "asc" },
+    }),
+    prisma.client.findMany({
+      where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
+      select: { id: true, company: true, sector: true },
+      orderBy: { company: "asc" },
+    }),
+  ]);
+  const clientOpts = clients.map((c) => ({
+    id: c.id,
+    label: c.company,
+    sector: c.sector,
+  }));
 
   return (
     <div className="space-y-6">
@@ -33,9 +46,7 @@ export default async function ThirdPartiesPage() {
           </p>
         </div>
         {canRegisterClient(user.designation) && (
-          <Link href="/app/third-parties/new" className={buttonVariants()}>
-            New third party
-          </Link>
+          <ThirdPartyFormButton clients={clientOpts} />
         )}
       </div>
 
@@ -45,6 +56,7 @@ export default async function ThirdPartiesPage() {
             <TableRow>
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>Reference client</TableHead>
               <TableHead>City</TableHead>
               <TableHead>Contact person</TableHead>
               <TableHead>Contact number</TableHead>
@@ -71,6 +83,9 @@ export default async function ThirdPartiesPage() {
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
+                  {t.referenceClient?.company ?? "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
                   {t.city ?? "—"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
@@ -86,7 +101,7 @@ export default async function ThirdPartiesPage() {
             ))}
             {thirdParties.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   No third parties yet.
                 </TableCell>
               </TableRow>

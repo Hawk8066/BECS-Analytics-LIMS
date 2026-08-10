@@ -682,6 +682,7 @@ model Client {
   invoices Invoice[]
   portalUsers User[] @relation("ClientPortalUser")
   testQuotations TestQuotation[]
+  referredThirdParties ThirdParty[]
 
   @@index([facilityId])
 }
@@ -1014,6 +1015,9 @@ model ThirdParty {
   email         String?
   ntn           String?
   stn           String?
+  // The client this third party is associated with (who asks reports in its name).
+  referenceClientId String?
+  referenceClient   Client? @relation(fields: [referenceClientId], references: [id])
   facilityId    String
   createdById   String?
   createdAt     DateTime @default(now())
@@ -1021,6 +1025,7 @@ model ThirdParty {
   samples Sample[]
 
   @@index([facilityId])
+  @@index([referenceClientId])
 }
 
 // A test line item on a sample (sample × parameter). Result entry + raw-data

@@ -24,11 +24,26 @@ export default async function ThirdPartyDetailPage({
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const tp = await prisma.thirdParty.findUnique({ where: { id } });
+  const tp = await prisma.thirdParty.findUnique({
+    where: { id },
+    include: { referenceClient: { select: { company: true } } },
+  });
   if (!tp) notFound();
   if (!user.canReadCrossSection && tp.facilityId !== user.facilityId) notFound();
 
   const canEdit = canRegisterClient(user.designation);
+  const clients = canEdit
+    ? await prisma.client.findMany({
+        where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
+        select: { id: true, company: true, sector: true },
+        orderBy: { company: "asc" },
+      })
+    : [];
+  const clientOpts = clients.map((c) => ({
+    id: c.id,
+    label: c.company,
+    sector: c.sector,
+  }));
   const address = [
     tp.addressLine1,
     tp.addressLine2,
@@ -53,6 +68,7 @@ export default async function ThirdPartyDetailPage({
 
       {canEdit ? (
         <ThirdPartyForm
+          clients={clientOpts}
           initial={{
             id: tp.id,
             company: tp.company,
@@ -67,11 +83,13 @@ export default async function ThirdPartyDetailPage({
             email: tp.email,
             ntn: tp.ntn,
             stn: tp.stn,
+            referenceClientId: tp.referenceClientId,
           }}
         />
       ) : (
         <div className="rounded-md border p-4">
           <Field label="Name" value={tp.company} />
+          <Field label="Reference client" value={tp.referenceClient?.company} />
           <Field label="Address" value={address} />
           <Field label="Contact person" value={tp.contactPerson} />
           <Field label="Contact number" value={tp.contactNumber} />

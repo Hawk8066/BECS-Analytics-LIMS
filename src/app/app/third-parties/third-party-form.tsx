@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   createThirdParty,
@@ -27,6 +27,7 @@ export interface ThirdPartyValues {
   email: string | null;
   ntn: string | null;
   stn: string | null;
+  referenceClientId: string | null;
 }
 
 function Text({
@@ -46,13 +47,40 @@ function Text({
   );
 }
 
-export function ThirdPartyForm({ initial }: { initial?: ThirdPartyValues }) {
+export function ThirdPartyForm({
+  initial,
+  clients,
+  onSaved,
+}: {
+  initial?: ThirdPartyValues;
+  /** Clients this third party can be associated with (the reference client). */
+  clients: { id: string; label: string; sector: string | null }[];
+  /** Modal mode: called after a successful create (e.g. to close the popup). */
+  onSaved?: () => void;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     initial ? updateThirdParty : createThirdParty,
     {},
   );
 
-  if (!initial && state.ok) {
+  // Sector filters which clients the reference-client picker offers.
+  const [sector, setSector] = useState("");
+  const [referenceClientId, setReferenceClientId] = useState(
+    initial?.referenceClientId ?? "",
+  );
+  const sectorOptions = [
+    ...new Set(clients.map((c) => c.sector).filter((s): s is string => !!s)),
+  ].sort();
+  const visibleClients = sector
+    ? clients.filter((c) => c.sector === sector)
+    : clients;
+
+  // In popup mode, close on a successful create instead of showing the panel.
+  useEffect(() => {
+    if (!initial && state.ok && onSaved) onSaved();
+  }, [state.ok, initial, onSaved]);
+
+  if (!initial && state.ok && !onSaved) {
     return (
       <div className="max-w-xl space-y-4 rounded-md border border-green-200 bg-green-50 p-4">
         <p className="font-medium text-green-800">Third party saved ✓</p>
@@ -83,6 +111,57 @@ export function ThirdPartyForm({ initial }: { initial?: ThirdPartyValues }) {
           required
         />
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="tp-sector">Sector</Label>
+          <select
+            id="tp-sector"
+            value={sector}
+            onChange={(e) => {
+              const s = e.target.value;
+              setSector(s);
+              // Drop the picked client if the new sector no longer shows it.
+              if (
+                referenceClientId &&
+                s &&
+                !clients.some(
+                  (c) => c.id === referenceClientId && c.sector === s,
+                )
+              )
+                setReferenceClientId("");
+            }}
+            className="h-9 rounded-md border bg-transparent px-2 text-sm"
+          >
+            <option value="">All sectors</option>
+            {sectorOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="referenceClientId">Reference client</Label>
+          <select
+            id="referenceClientId"
+            name="referenceClientId"
+            value={referenceClientId}
+            onChange={(e) => setReferenceClientId(e.target.value)}
+            className="h-9 rounded-md border bg-transparent px-2 text-sm"
+          >
+            <option value="">— none —</option>
+            {visibleClients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        The client who asks reports to be issued in this third party&apos;s name.
+        Pick a sector to narrow the list.
+      </p>
       <div className="grid gap-2">
         <Text name="addressLine1" label="Address line 1" value={initial?.addressLine1} />
         <Text name="addressLine2" label="Address line 2" value={initial?.addressLine2} />
