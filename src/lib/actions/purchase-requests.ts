@@ -7,8 +7,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canApprovePR, canVerifyPR } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { nextNumber } from "@/lib/numbering";
-import { pathForCategory } from "@/lib/procurement/path";
+import { createPRFromLines, type PRLineInput } from "@/lib/procurement/create-pr";
+import { isServiceCategory } from "@/lib/procurement/service";
 
 export type FormState = { error?: string };
 
@@ -30,27 +30,25 @@ export async function createPR(
   const justifications = formData.getAll("justification").map(String);
   const priorities = formData.getAll("priority").map(String);
 
-  const lines: {
-    description: string;
-    specification: string | null;
-    category: ItemCategory;
-    path: ReturnType<typeof pathForCategory>;
-    packSize: string | null;
-    quantity: number;
-    unit: string | null;
-    justification: string | null;
-    priority: string | null;
-  }[] = [];
+  const lines: PRLineInput[] = [];
   for (let i = 0; i < descriptions.length; i++) {
     const description = descriptions[i]?.trim();
     if (!description) continue;
     const category = categories[i];
     if (!VALID_CATEGORIES.includes(category)) continue;
+    // Service lines are raised from their own module (an equipment repair opens
+    // a case file and generates its PR), never typed into the requisition form
+    // — a repair line with no case behind it would have nothing to gate-pass,
+    // receive or requalify. The form never offers these categories; this stops
+    // a hand-crafted post.
+    if (isServiceCategory(category as ItemCategory))
+      return {
+        error: "Raise repair requests from the equipment register.",
+      };
     lines.push({
       description,
       specification: specifications[i]?.trim() || null,
       category: category as ItemCategory,
-      path: pathForCategory(category as ItemCategory),
       packSize: packSizes[i]?.trim() || null,
       quantity: parseInt(quantities[i] || "1", 10) || 1,
       unit: units[i]?.trim() || null,
@@ -60,39 +58,11 @@ export async function createPR(
   }
   if (lines.length === 0) return { error: "Add at least one line item." };
 
-  const facility = await prisma.facility.findUnique({
-    where: { id: actor.facilityId },
-  });
-  const year = new Date().getFullYear();
-  const prNo = await nextNumber({
-    key: `PR:${facility!.code}:${year}`,
-    prefix: `PR-${facility!.code}`,
-    year,
-    pad: 5,
-  });
-
-  const pr = await prisma.purchaseRequest.create({
-    data: {
-      prNo,
-      requestedById: actor.id,
-      note: String(formData.get("note") || "").trim() || null,
-      facilityId: actor.facilityId,
-      sectionId: actor.sectionId,
-      lines: { create: lines },
-    },
-  });
-
-  await writeAudit({
-    actorId: actor.id,
-    action: "CREATE",
-    entityType: "PurchaseRequest",
-    entityId: pr.id,
-    after: { prNo, lines: lines.length },
-    facilityId: actor.facilityId,
-    sectionId: actor.sectionId,
-  });
-
-  revalidatePath("/app/procurement");
+  const pr = await createPRFromLines(
+    actor,
+    lines,
+    String(formData.get("note") || ""),
+  );
   redirect(`/app/procurement/${pr.id}`);
 }
 

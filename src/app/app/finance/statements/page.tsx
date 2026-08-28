@@ -1,36 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { AccountType } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/current-user";
-import { prisma } from "@/lib/db";
 import { canViewFinance } from "@/lib/auth/perms";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
-function pkr(paisa: number): string {
-  return (paisa / 100).toLocaleString("en-PK", { minimumFractionDigits: 2 });
-}
-
-// Normal-balance convention: ASSET/EXPENSE are debit-normal; the rest credit-normal.
-function balance(type: AccountType, debit: number, credit: number): number {
-  return type === "ASSET" || type === "EXPENSE"
-    ? debit - credit
-    : credit - debit;
-}
-
-function Row({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
-  return (
-    <div
-      className={`flex justify-between py-1 text-sm ${bold ? "font-semibold" : ""}`}
-    >
-      <span className={bold ? "" : "text-muted-foreground"}>{label}</span>
-      <span>PKR {pkr(value)}</span>
-    </div>
-  );
-}
+import { getFinanceSummary } from "@/lib/finance/summary";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatTile, TileRow } from "@/components/finance/stat-tile";
+import { Money, SectionLabel, Row } from "@/components/finance/money";
 
 export default async function StatementsPage() {
   const user = await getSessionUser();
@@ -38,108 +13,209 @@ export default async function StatementsPage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canViewFinance(user.designation)) redirect("/app");
 
-  const [accounts, grouped] = await Promise.all([
-    prisma.chartOfAccount.findMany({ orderBy: { code: "asc" } }),
-    prisma.journalLine.groupBy({
-      by: ["accountId"],
-      _sum: { debit: true, credit: true },
-    }),
-  ]);
-  const sums = new Map(grouped.map((g) => [g.accountId, g._sum]));
-
-  const byType = (t: AccountType) =>
-    accounts
-      .filter((a) => a.type === t)
-      .map((a) => {
-        const s = sums.get(a.id);
-        return { a, bal: balance(t, s?.debit ?? 0, s?.credit ?? 0) };
-      });
-
-  const revenue = byType("REVENUE");
-  const expense = byType("EXPENSE");
-  const asset = byType("ASSET");
-  const liability = byType("LIABILITY");
-  const equity = byType("EQUITY");
-
-  const totalRevenue = revenue.reduce((s, r) => s + r.bal, 0);
-  const totalExpense = expense.reduce((s, r) => s + r.bal, 0);
-  const netIncome = totalRevenue - totalExpense;
-
-  const totalAssets = asset.reduce((s, r) => s + r.bal, 0);
-  const totalLiabilities = liability.reduce((s, r) => s + r.bal, 0);
-  const totalEquity = equity.reduce((s, r) => s + r.bal, 0) + netIncome; // retained earnings
+  const s = await getFinanceSummary();
+  const e = s.expenses.byGroup;
 
   return (
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Financial Statements</h1>
         <p className="text-sm text-muted-foreground">
-          Computed live from the general ledger (ADR-0004). Amounts in PKR.
+          Computed live from the general ledger (ADR-0004). Company-wide, in PKR.
         </p>
       </div>
 
+      <TileRow>
+        <StatTile label="Income from tests" value={s.income.net} tone="#0f6f6a" />
+        <StatTile label="Total expenses" value={s.expenses.total} tone="#a8481c" />
+        <StatTile
+          label="Net income"
+          value={s.netIncome}
+          tone={s.netIncome < 0 ? "#a8481c" : "#3d7a20"}
+        />
+        <StatTile
+          label="Payable to vendors"
+          value={s.vendors.outstanding}
+          tone="#0a6ea0"
+        />
+        <StatTile
+          label="Payable to external labs"
+          value={s.labs.outstanding}
+          tone="#2f6f9f"
+        />
+      </TileRow>
+
+      {/* 1 — Income from the tests ------------------------------------------ */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Profit &amp; Loss</CardTitle>
+          <CardTitle className="text-base">1. Income from tests</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-1 text-xs font-medium uppercase text-muted-foreground">
-            Revenue
-          </p>
-          {revenue.map((r) => (
-            <Row key={r.a.id} label={`${r.a.code} ${r.a.name}`} value={r.bal} />
-          ))}
-          <Row label="Total revenue" value={totalRevenue} bold />
-          <p className="mb-1 mt-3 text-xs font-medium uppercase text-muted-foreground">
-            Expenses
-          </p>
-          {expense.map((r) => (
-            <Row key={r.a.id} label={`${r.a.code} ${r.a.name}`} value={r.bal} />
-          ))}
-          <Row label="Total expenses" value={totalExpense} bold />
-          <div className="mt-3 border-t pt-2">
-            <Row label="Net income" value={netIncome} bold />
-          </div>
-        </CardContent>
-      </Card>
+          <SectionLabel>Billed to clients</SectionLabel>
+          <Row label="Net testing revenue" value={s.income.net} />
+          <Row label="Sales tax charged (owed to FBR)" value={s.income.tax} />
+          <Row label="Total invoiced (tax-inclusive)" value={s.income.invoiced} bold />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Balance Sheet</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-1 text-xs font-medium uppercase text-muted-foreground">
-            Assets
-          </p>
-          {asset.map((r) => (
-            <Row key={r.a.id} label={`${r.a.code} ${r.a.name}`} value={r.bal} />
-          ))}
-          <Row label="Total assets" value={totalAssets} bold />
-
-          <p className="mb-1 mt-3 text-xs font-medium uppercase text-muted-foreground">
-            Liabilities
-          </p>
-          {liability.map((r) => (
-            <Row key={r.a.id} label={`${r.a.code} ${r.a.name}`} value={r.bal} />
-          ))}
-          <Row label="Total liabilities" value={totalLiabilities} bold />
-
-          <p className="mb-1 mt-3 text-xs font-medium uppercase text-muted-foreground">
-            Equity
-          </p>
-          {equity.map((r) => (
-            <Row key={r.a.id} label={`${r.a.code} ${r.a.name}`} value={r.bal} />
-          ))}
-          <Row label="Retained earnings (net income)" value={netIncome} />
-          <Row label="Total equity" value={totalEquity} bold />
-
-          <div className="mt-3 border-t pt-2">
+          <SectionLabel className="mt-3">Collection</SectionLabel>
+          <Row label="Received from clients" value={s.income.received} />
+          <div className="mt-2 border-t pt-2">
             <Row
-              label="Liabilities + Equity"
-              value={totalLiabilities + totalEquity}
+              label="Still receivable from clients"
+              value={s.income.outstanding}
               bold
             />
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {s.income.records.count} invoice
+            {s.income.records.count === 1 ? "" : "s"} on record ·{" "}
+            <Link href="/app/finance/invoices" className="underline">
+              View invoices
+            </Link>
+          </p>
+          {/* The ledger is append-only: deleting an invoice leaves its posting
+              behind, so say so rather than showing two revenue figures. */}
+          {s.income.records.total !== s.income.invoiced && (
+            <p className="mt-1 text-xs text-amber-700">
+              Figures come from the ledger. The invoices still on record total{" "}
+              <Money value={s.income.records.total} /> — a difference of{" "}
+              <Money value={s.income.invoiced - s.income.records.total} />, which
+              means invoices were deleted after being posted.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 2 — Amount payable to vendors -------------------------------------- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">2. Amount payable to vendors</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {s.vendors.rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No vendor bills recorded yet.{" "}
+              <Link href="/app/finance/vendor-bills" className="underline">
+                Record a vendor bill
+              </Link>{" "}
+              to start tracking what the lab owes suppliers.
+            </p>
+          ) : (
+            <>
+              {s.vendors.rows.map((v) => (
+                <Row
+                  key={v.id}
+                  label={v.name}
+                  value={v.outstanding}
+                  hint={
+                    v.outstanding > 0
+                      ? `${v.openBills} open bill${v.openBills === 1 ? "" : "s"}`
+                      : "settled"
+                  }
+                />
+              ))}
+              <div className="mt-2 border-t pt-2">
+                <Row label="Total payable to vendors" value={s.vendors.outstanding} bold />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                <Money value={s.vendors.billed} /> billed ·{" "}
+                <Money value={s.vendors.paid} /> paid ·{" "}
+                <Link href="/app/finance/vendor-bills" className="underline">
+                  View vendor bills
+                </Link>
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 3 — Total expenses -------------------------------------------------- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">3. Total expenses</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Row
+            label="Vendor purchases"
+            value={e.vendorPurchases}
+            hint="goods & supplies billed by vendors"
+          />
+          <Row
+            label="Utilities & other payments"
+            value={e.utilitiesOther}
+            hint="electricity, rent, transport, upkeep"
+          />
+          <Row
+            label="External labs"
+            value={e.externalLabs}
+            hint="subcontracted testing"
+          />
+          <Row label="Payroll" value={e.payroll} hint="salaries & allowances" />
+          <div className="mt-2 border-t pt-2">
+            <Row label="Total expenses" value={s.expenses.total} bold />
+          </div>
+          <div className="mt-3 border-t pt-2">
+            <Row
+              label="Net income (testing revenue less expenses)"
+              value={s.netIncome}
+              bold
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Vendor purchases and utilities are recorded on the{" "}
+            <Link href="/app/finance/vendor-bills" className="underline">
+              vendor bills
+            </Link>{" "}
+            and{" "}
+            <Link href="/app/finance/expenses" className="underline">
+              expenses
+            </Link>{" "}
+            pages.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* 4 — Amount payable to external labs --------------------------------- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            4. Amount payable to external labs
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {s.labs.rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No outsource-lab bills recorded yet.
+            </p>
+          ) : (
+            <>
+              {s.labs.rows.map((l) => (
+                <Row
+                  key={l.id}
+                  label={l.name}
+                  value={l.outstanding}
+                  hint={
+                    l.outstanding > 0
+                      ? `${l.openBills} open bill${l.openBills === 1 ? "" : "s"}`
+                      : "settled"
+                  }
+                />
+              ))}
+              <div className="mt-2 border-t pt-2">
+                <Row
+                  label="Total payable to external labs"
+                  value={s.labs.outstanding}
+                  bold
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                <Money value={s.labs.billed} /> billed ·{" "}
+                <Money value={s.labs.paid} /> paid ·{" "}
+                <Link href="/app/finance/outsource-bills" className="underline">
+                  View outsource bills
+                </Link>
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

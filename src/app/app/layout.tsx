@@ -5,14 +5,19 @@ import {
   canCoordinateTesting,
   canIssueInvoice,
   canViewFinance,
+  canManagePayroll,
   canRegisterOutsourceLab,
 } from "@/lib/auth/perms";
+import { readableFacilities } from "@/lib/facilities";
 import { NavLink } from "@/components/nav-link";
 import { NavSection } from "@/components/nav-section";
 import { BecsLogo } from "@/components/becs-logo";
 import { UndertakingGate } from "@/components/undertaking-gate";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "./actions";
+
+type NavItem = { href: string; label: string; exact?: boolean };
+type NavGroup = { title: string; tone: string; items: NavItem[] };
 
 export default async function AppLayout({
   children,
@@ -29,10 +34,12 @@ export default async function AppLayout({
   const active = user.status === "ACTIVE";
   // Force the yearly undertaking before any app usage (first login + each 1 Jan).
   const undertakingDue = active ? await isUndertakingDue(user.id) : false;
+  // The per-lab registers get one nav entry per lab this user may read.
+  const labs = active && !undertakingDue ? await readableFacilities(user) : [];
   // Each nav section carries its own tone so the sidebar can be scanned by
   // colour. Tones are darkened brand hues so the small uppercase headings stay
   // legible (>= 4.5:1) on the light sidebar.
-  const groups = active && !undertakingDue
+  const groups: NavGroup[] = active && !undertakingDue
     ? [
         {
           title: "Overview",
@@ -86,23 +93,44 @@ export default async function AppLayout({
             { href: "/app/inventory", label: "Stores & Inventory" },
           ],
         },
-        {
-          title: "Equipment & Traceability",
-          tone: "#2f6f9f",
+        // Each lab is its own section, holding that lab's registers. A user who
+        // can only read their own lab simply gets the one section.
+        ...labs.map((l) => ({
+          title: l.name,
+          tone: l.tone,
           items: [
-            { href: "/app/equipment", label: "Equipment" },
-            { href: "/app/materials", label: "Materials" },
+            {
+              href: `/app/equipment/${l.slug}`,
+              label: "Equipment",
+              // The repairs register nests under this path — match it exactly
+              // so both entries don't light up at once.
+              exact: true,
+            },
+            { href: `/app/materials/${l.slug}`, label: "Materials" },
+            { href: `/app/equipment/${l.slug}/repairs`, label: "Repairs" },
           ],
-        },
+        })),
         {
           title: "Finance",
           tone: "#0f6f6a",
           items: [
-            { href: "/app/finance", label: "Ledger" },
+            // Landing page for the section, so it must not stay lit on the pages
+            // nested beneath it.
+            { href: "/app/finance", label: "Dashboard", exact: true },
             { href: "/app/finance/statements", label: "Statements" },
-            // Payables: what we owe outsource labs for subcontracted tests.
+            { href: "/app/finance/ledger", label: "Ledger" },
+            // Payables: what we owe suppliers and what we owe outsource labs.
             ...(canViewFinance(user.designation)
-              ? [{ href: "/app/finance/outsource-bills", label: "Payables" }]
+              ? [
+                  { href: "/app/finance/vendor-bills", label: "Vendor Bills" },
+                  { href: "/app/finance/expenses", label: "Utilities & Expenses" },
+                  { href: "/app/finance/outsource-bills", label: "External Lab Bills" },
+                ]
+              : []),
+            // Payroll: monthly payslips + salary tax. Salary data is sensitive,
+            // so it's limited to those who prepare payroll (Accountant/COO).
+            ...(canManagePayroll(user.designation)
+              ? [{ href: "/app/finance/payroll", label: "Payroll" }]
               : []),
           ],
         },
@@ -137,7 +165,7 @@ export default async function AppLayout({
         </div>
         {groups.map((g) => {
           const links = g.items.map((n) => (
-            <NavLink key={n.href} href={n.href}>
+            <NavLink key={n.href} href={n.href} exact={n.exact}>
               {n.label}
             </NavLink>
           ));

@@ -55,6 +55,18 @@ interface Row {
   specification: string;
   packSize: string;
   unit: string;
+  quantity: string;
+}
+
+// A pre-filled requisition line (e.g. from the reorder board). `catKey` is a
+// LAB_CATS / GENERAL_CATS key (equal to the InventoryCategory for lab items).
+export interface InitialRow {
+  catKey: string;
+  description: string;
+  specification?: string;
+  packSize?: string;
+  unit?: string;
+  quantity?: string;
 }
 
 let rowSeq = 0;
@@ -65,25 +77,58 @@ const makeRow = (cats: Cat[]): Row => ({
   specification: "",
   packSize: "",
   unit: "",
+  quantity: "1",
 });
 
 export function PRForm({
   items,
+  initialRows,
 }: {
   /** Inventory catalog to pick from: name, classification, pack size + spec hint. */
   items: { name: string; category: string; pack: string; spec: string }[];
+  /** Pre-filled lines (e.g. reorder board) — seeds the matching tab. */
+  initialRows?: InitialRow[];
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     createPR,
     {},
   );
-  const [tab, setTab] = useState<"lab" | "general">("lab");
-  const [labRows, setLabRows] = useState<Row[]>(() => [
-    makeRow(LAB_CATS),
-    makeRow(LAB_CATS),
-    makeRow(LAB_CATS),
-  ]);
-  const [generalRows, setGeneralRows] = useState<Row[]>(() => [makeRow(GENERAL_CATS)]);
+
+  // Seed a tab's rows from initialRows whose catKey belongs to that tab; empty
+  // tabs get one blank row. With no initialRows, the usual blank defaults.
+  const seed = (cats: Cat[], fallback: number): Row[] => {
+    if (initialRows?.length) {
+      const keys = new Set(cats.map((c) => c.key));
+      const rows = initialRows
+        .filter((r) => keys.has(r.catKey))
+        .map((r) => ({
+          key: rowSeq++,
+          catKey: r.catKey,
+          description: r.description,
+          specification: r.specification ?? "",
+          packSize: r.packSize ?? "",
+          unit: r.unit ?? "",
+          quantity: r.quantity ?? "1",
+        }));
+      return rows.length ? rows : [makeRow(cats)];
+    }
+    return Array.from({ length: fallback }, () => makeRow(cats));
+  };
+
+  const seededGeneral = !!initialRows?.some((r) =>
+    GENERAL_CATS.some((c) => c.key === r.catKey),
+  );
+  const seededLab =
+    !initialRows?.length ||
+    initialRows.some((r) => LAB_CATS.some((c) => c.key === r.catKey));
+
+  const [tab, setTab] = useState<"lab" | "general">(
+    seededLab ? "lab" : seededGeneral ? "general" : "lab",
+  );
+  const [labRows, setLabRows] = useState<Row[]>(() => seed(LAB_CATS, 3));
+  const [generalRows, setGeneralRows] = useState<Row[]>(() =>
+    seed(GENERAL_CATS, 1),
+  );
 
   // Catalog item names grouped by classification (for the datalists), and a
   // "classification:name" → spec lookup for auto-filling the specification.
@@ -197,7 +242,13 @@ export function PRForm({
                     onChange={(e) => patch(row.key, { unit: e.target.value })}
                     placeholder="e.g. mL"
                   />
-                  <Input name="quantity" type="number" min="1" defaultValue="1" />
+                  <Input
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    value={row.quantity}
+                    onChange={(e) => patch(row.key, { quantity: e.target.value })}
+                  />
                   <Input name="justification" placeholder="Why needed" />
                   <select
                     name="priority"

@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DateInput } from "@/components/ui/date-input";
 
-export function MaterialForm({ type }: { type: string }) {
+export function MaterialForm({
+  type,
+  facility,
+}: {
+  type: string;
+  /** Lab slug this register page belongs to. */
+  facility?: string;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     registerMaterial,
     {},
@@ -17,6 +24,7 @@ export function MaterialForm({ type }: { type: string }) {
   return (
     <form action={formAction} className="grid max-w-xl gap-4">
       <input type="hidden" name="type" value={type} />
+      {facility && <input type="hidden" name="facility" value={facility} />}
       <div className="grid gap-2">
         <Label htmlFor="name">Name</Label>
         <Input id="name" name="name" required />

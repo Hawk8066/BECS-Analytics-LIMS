@@ -31,6 +31,7 @@ export async function setSalaryStructure(formData: FormData): Promise<void> {
     conveyance: toPaisa(formData.get("conveyance")),
     medical: toPaisa(formData.get("medical")),
     otherAllowances: toPaisa(formData.get("otherAllowances")),
+    cashAllowance: toPaisa(formData.get("cashAllowance")),
     providentFundPct: toInt(formData.get("providentFundPct")),
     eobi: toPaisa(formData.get("eobi")),
   };
@@ -82,6 +83,7 @@ export async function createPayrollRun(formData: FormData): Promise<void> {
           return {
             userId: s.userId,
             gross: c.gross,
+            cashAllowance: c.cashAllowance,
             incomeTax: c.incomeTax,
             providentFund: c.providentFund,
             eobi: c.eobi,

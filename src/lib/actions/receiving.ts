@@ -16,6 +16,8 @@ import {
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { nextNumber } from "@/lib/numbering";
+import { inventoryCategoryFor } from "@/lib/inventory";
+import { isServiceCategory } from "@/lib/procurement/service";
 
 const toAns = (v: FormDataEntryValue | null): CheckAnswer | null => {
   const s = String(v ?? "");
@@ -146,7 +148,12 @@ export async function issueGRN(formData: FormData): Promise<void> {
     where: { id },
     include: {
       grn: true,
-      po: { include: { lines: true, pr: { include: { lines: true } } } },
+      po: {
+        include: {
+          lines: { include: { prLine: { select: { category: true } } } },
+          pr: { include: { lines: true } },
+        },
+      },
     },
   });
   if (!receipt) throw new Error("Receipt not found.");
@@ -158,9 +165,26 @@ export async function issueGRN(formData: FormData): Promise<void> {
   if (!main) throw new Error("Main store not configured.");
 
   // Credit only the lines this PO covers (a PR can split across vendor POs).
-  // Legacy POs have no PurchaseOrderLine rows — fall back to all PR lines.
-  const creditLines =
-    receipt.po.lines.length > 0 ? receipt.po.lines : receipt.po.pr.lines;
+  // Legacy POs have no PurchaseOrderLine rows — fall back to all PR lines. Each
+  // received line lands under its designated register category.
+  //
+  // Service lines (equipment repair) are dropped: the work is received and
+  // inspected like anything else, but there is no article to put on a shelf —
+  // crediting one would invent a stock item named after the job. A service-only
+  // PO therefore issues a GRN that stocks nothing, which is correct.
+  const received = (
+    receipt.po.lines.length > 0
+      ? receipt.po.lines.map((l) => ({
+          description: l.description,
+          quantity: l.quantity,
+          category: l.prLine.category,
+        }))
+      : receipt.po.pr.lines.map((l) => ({
+          description: l.description,
+          quantity: l.quantity,
+          category: l.category,
+        }))
+  ).filter((r) => !isServiceCategory(r.category));
 
   const year = new Date().getFullYear();
   const grnNo = await nextNumber({
@@ -170,41 +194,56 @@ export async function issueGRN(formData: FormData): Promise<void> {
     pad: 5,
   });
 
-  await prisma.$transaction([
-    prisma.gRN.create({
+  await prisma.$transaction(async (tx) => {
+    await tx.gRN.create({
       data: {
         grnNo,
         goodsReceiptId: id,
         storeId: main.id,
         issuedById: actor.id,
       },
-    }),
-    ...creditLines.map((l) =>
-      prisma.stockTransaction.create({
-        data: {
+    });
+    // Add each received item to the main store's register: bump the matching
+    // item's balance, or create it under its designated category if new.
+    for (const r of received) {
+      const existing = await tx.inventoryItem.findFirst({
+        where: {
           storeId: main.id,
-          description: l.description,
-          quantity: l.quantity,
-          reason: "GRN",
-          refType: "GRN",
-          refId: grnNo,
+          name: { equals: r.description, mode: "insensitive" },
         },
-      }),
-    ),
-    prisma.purchaseOrder.update({
+      });
+      if (existing) {
+        await tx.inventoryItem.update({
+          where: { id: existing.id },
+          data: { quantity: (existing.quantity ?? 0) + r.quantity },
+        });
+      } else {
+        await tx.inventoryItem.create({
+          data: {
+            storeId: main.id,
+            facilityId: main.facilityId,
+            category: inventoryCategoryFor(r.category),
+            name: r.description,
+            quantity: r.quantity,
+          },
+        });
+      }
+    }
+    await tx.purchaseOrder.update({
       where: { id: receipt.poId },
       data: { status: "RECEIVED" },
-    }),
-  ]);
+    });
+  });
 
   await writeAudit({
     actorId: actor.id,
     action: "CREATE",
     entityType: "GRN",
     entityId: grnNo,
-    after: { lines: creditLines.length },
+    after: { lines: received.length },
   });
   revalidatePath(`/app/procurement/${receipt.po.prId}`);
+  revalidatePath("/app/inventory");
 }
 
 // Any employee requests stock be moved from the main store to a sub-store (BR-10).
@@ -252,32 +291,62 @@ export async function decideIssue(formData: FormData): Promise<void> {
   if (!issue) throw new Error("Request not found.");
 
   if (decision === "APPROVED") {
-    await prisma.$transaction([
-      prisma.stockTransaction.create({
-        data: {
+    await prisma.$transaction(async (tx) => {
+      // Move the item's balance from the source store's register to the
+      // destination store's register (creating it there if it's not held yet).
+      const from = await tx.inventoryItem.findFirst({
+        where: {
           storeId: issue.fromStoreId,
-          description: issue.description,
-          quantity: -issue.quantity,
-          reason: "ISSUE_OUT",
-          refType: "IssueRequest",
-          refId: issue.id,
+          name: { equals: issue.description, mode: "insensitive" },
         },
-      }),
-      prisma.stockTransaction.create({
-        data: {
+      });
+      if (from) {
+        await tx.inventoryItem.update({
+          where: { id: from.id },
+          data: { quantity: Math.max(0, (from.quantity ?? 0) - issue.quantity) },
+        });
+      }
+      const to = await tx.inventoryItem.findFirst({
+        where: {
           storeId: issue.toStoreId,
-          description: issue.description,
-          quantity: issue.quantity,
-          reason: "ISSUE_IN",
-          refType: "IssueRequest",
-          refId: issue.id,
+          name: { equals: issue.description, mode: "insensitive" },
         },
-      }),
-      prisma.issueRequest.update({
+      });
+      if (to) {
+        await tx.inventoryItem.update({
+          where: { id: to.id },
+          data: { quantity: (to.quantity ?? 0) + issue.quantity },
+        });
+      } else {
+        const toStore = await tx.store.findUnique({
+          where: { id: issue.toStoreId },
+          select: { facilityId: true },
+        });
+        await tx.inventoryItem.create({
+          data: {
+            storeId: issue.toStoreId,
+            facilityId: toStore?.facilityId ?? issue.facilityId,
+            category: from?.category ?? "MISCELLANEOUS",
+            name: issue.description,
+            quantity: issue.quantity,
+            // Mirror the source item so the sub-store register shows the same
+            // details (packing, spec, make, expiry…) as the main store.
+            pack: from?.pack ?? null,
+            unit: from?.unit ?? null,
+            specification: from?.specification ?? null,
+            accessories: from?.accessories ?? [],
+            make: from?.make ?? null,
+            model: from?.model ?? null,
+            reorderLevel: from?.reorderLevel ?? null,
+            expiryDate: from?.expiryDate ?? null,
+          },
+        });
+      }
+      await tx.issueRequest.update({
         where: { id },
         data: { status: "APPROVED", approvedById: actor.id, decidedAt: new Date() },
-      }),
-    ]);
+      });
+    });
   } else {
     await prisma.issueRequest.update({
       where: { id },
@@ -294,4 +363,6 @@ export async function decideIssue(formData: FormData): Promise<void> {
     facilityId: issue.facilityId,
   });
   revalidatePath("/app/inventory");
+  revalidatePath(`/app/inventory/${issue.fromStoreId}`);
+  revalidatePath(`/app/inventory/${issue.toStoreId}`);
 }

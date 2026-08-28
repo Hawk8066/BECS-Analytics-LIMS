@@ -3,14 +3,20 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { designationLabel } from "@/lib/labels";
-import { PRForm } from "../pr-form";
+import { effectiveThreshold } from "@/lib/inventory";
+import { PRForm, type InitialRow } from "../pr-form";
 
-export default async function NewPRPage() {
+export default async function NewPRPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string }>;
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
+  const { item: fromItemId } = await searchParams;
 
-  const [profile, items] = await Promise.all([
+  const [profile, items, fromItem] = await Promise.all([
     prisma.personnelProfile.findUnique({
       where: { userId: user.id },
       select: { fullName: true },
@@ -20,6 +26,22 @@ export default async function NewPRPage() {
       select: { name: true, category: true, pack: true, make: true, model: true },
       orderBy: { name: "asc" },
     }),
+    fromItemId
+      ? prisma.inventoryItem.findUnique({
+          where: { id: fromItemId },
+          select: {
+            name: true,
+            category: true,
+            pack: true,
+            unit: true,
+            make: true,
+            model: true,
+            specification: true,
+            quantity: true,
+            reorderLevel: true,
+          },
+        })
+      : null,
   ]);
   const requesterName = profile?.fullName ?? user.email;
   const itemOpts = items.map((it) => ({
@@ -28,6 +50,30 @@ export default async function NewPRPage() {
     pack: it.pack ?? "",
     spec: [it.make, it.model].filter(Boolean).join(", "),
   }));
+
+  // Seed the form with the low-stock item when arriving via "Generate PR":
+  // its category maps 1:1 to a PR-form key, and we suggest a top-up quantity
+  // that lifts the on-hand balance just past its reorder threshold.
+  let initialRows: InitialRow[] | undefined;
+  if (fromItem) {
+    const spec =
+      fromItem.specification ??
+      [fromItem.make, fromItem.model].filter(Boolean).join(", ");
+    const topUp = Math.max(
+      1,
+      effectiveThreshold(fromItem.reorderLevel) - (fromItem.quantity ?? 0) + 1,
+    );
+    initialRows = [
+      {
+        catKey: fromItem.category,
+        description: fromItem.name,
+        specification: spec || undefined,
+        packSize: fromItem.pack ?? undefined,
+        unit: fromItem.unit ?? undefined,
+        quantity: String(topUp),
+      },
+    ];
+  }
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -62,7 +108,7 @@ export default async function NewPRPage() {
         </div>
       </div>
 
-      <PRForm items={itemOpts} />
+      <PRForm items={itemOpts} initialRows={initialRows} />
     </div>
   );
 }

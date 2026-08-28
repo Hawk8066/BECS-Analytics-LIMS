@@ -114,6 +114,21 @@ export const canManageStore = (d: Designation) =>
 export const canManageEquipment = (d: Designation) =>
   isAdmin(d) || d === "OPERATIONS_MANAGER" || d === "LAB_MANAGER_RYK" || d === "COO";
 
+/**
+ * Release equipment from the premises for off-site repair (BR-EQ-5). The Store
+ * In-charge controls what physically leaves; the OM / RYK Lab Manager running
+ * the repair may also sign it out.
+ */
+export const canIssueGatePass = (d: Designation) =>
+  canManageStore(d) || canManageEquipment(d);
+
+/**
+ * Take repaired equipment back in. The Purchase Officer receives deliveries;
+ * the OM who owns the asset receives it back just as often.
+ */
+export const canReceiveRepair = (d: Designation) =>
+  canMarkReceived(d) || canManageEquipment(d);
+
 /** Materials register (chemicals/CRM/glassware/lab supplies) + certificate intake. */
 export const canManageMaterials = (d: Designation) =>
   isAdmin(d) ||
