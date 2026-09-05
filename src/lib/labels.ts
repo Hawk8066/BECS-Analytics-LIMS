@@ -10,6 +10,7 @@ export const DESIGNATION_LABELS: Record<Designation, string> = {
   OPERATIONS_MANAGER: "Operations Manager",
   LAB_MANAGER_RYK: "Lab Manager (RYK)",
   ANALYST: "Analyst",
+  ANALYST_RYK: "Analyst (RYK)",
   LAB_ASSISTANT: "Lab Assistant",
   LAB_ATTENDANT: "Lab Attendant",
   LIAISON_OFFICER: "Liaison Officer",

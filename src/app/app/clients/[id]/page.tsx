@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canRegisterClient } from "@/lib/auth/perms";
+import { canRegisterClient, canViewFinance } from "@/lib/auth/perms";
+import { docBalance } from "@/lib/finance/summary";
+import { Money, SectionLabel } from "@/components/finance/money";
 import {
   Card,
   CardContent,
@@ -10,8 +12,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ClientEditForm } from "./client-edit-form";
 import { ClientPortalManager } from "./client-portal-manager";
+
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
+  ISSUED: "secondary",
+  PARTIAL: "outline",
+  PAID: "default",
+};
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -39,6 +55,10 @@ export default async function ClientDetailPage({
         where: { designation: "CLIENT" },
         select: { email: true, status: true },
       },
+      invoices: {
+        orderBy: { createdAt: "desc" },
+        include: { payments: { select: { amount: true } } },
+      },
     },
   });
   if (!client) notFound();
@@ -47,6 +67,8 @@ export default async function ClientDetailPage({
     notFound();
 
   const canEdit = canRegisterClient(user.designation);
+  const showFinance = canViewFinance(user.designation);
+  const bal = docBalance(client.invoices);
   const login = client.portalUsers[0] ?? null;
   const address = [
     client.addressLine1,
@@ -109,6 +131,96 @@ export default async function ClientDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {showFinance && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Financial summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <SectionLabel>Invoiced</SectionLabel>
+                <div className="text-base font-semibold">
+                  <Money value={bal.billed} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Received</SectionLabel>
+                <div className="text-base font-semibold">
+                  <Money value={bal.paid} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Receivable</SectionLabel>
+                <div className="text-base font-semibold">
+                  <Money value={bal.outstanding} />
+                </div>
+                {bal.openDocs > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {bal.openDocs} open invoice{bal.openDocs === 1 ? "" : "s"}
+                  </p>
+                )}
+              </div>
+            </div>
+            {client.invoices.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice No</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {client.invoices.map((inv) => {
+                      const paid = inv.payments.reduce(
+                        (s, p) => s + p.amount,
+                        0,
+                      );
+                      return (
+                        <TableRow key={inv.id}>
+                          <TableCell className="font-mono text-xs">
+                            <Link
+                              href={`/app/finance/invoices/${inv.id}`}
+                              className="hover:underline"
+                            >
+                              {inv.invoiceNo}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Money value={inv.amount} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Money value={paid} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Money value={inv.amount - paid} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={STATUS_VARIANT[inv.status] ?? "secondary"}
+                            >
+                              {inv.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No invoices raised for this client yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

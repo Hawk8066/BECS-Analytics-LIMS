@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canManageOutsourceBilling, canRecordPayment } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { postJournal } from "@/lib/finance/posting";
 
@@ -100,6 +101,15 @@ export async function createVendorBill(
     after: { billNo, amount, taxPct, vendorId, poId, vendorInvoiceNo },
     facilityId: actor.facilityId,
   });
+  await publish({
+    template: "vendorBillRecorded",
+    params: {
+      billNo,
+      billId: bill.id,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
+  });
 
   revalidatePath("/app/finance/vendor-bills");
   revalidatePath("/app/finance");
@@ -154,6 +164,16 @@ export async function recordVendorPayment(
     entityType: "VendorPayment",
     entityId: billId,
     after: { amount },
+    facilityId: bill.facilityId,
+  });
+  await publish({
+    template: "vendorPaymentRecorded",
+    params: {
+      billNo: bill.billNo,
+      billId,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
     facilityId: bill.facilityId,
   });
 

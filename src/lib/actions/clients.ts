@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canRegisterClient } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 
 export type FormState = {
@@ -110,6 +111,13 @@ export async function createClient(
     entityId: client.id,
     after: { clientNo, company: d.company, portalLogin: email },
     facilityId: actor.facilityId,
+  });
+  // `company` is carried in params but only `renderIdentified` can print it —
+  // analysts see the client number alone (blinding, SSOT §8).
+  await publish({
+    template: "clientRegistered",
+    params: { clientNo, clientId: client.id, company: d.company },
+    actor,
   });
 
   revalidatePath("/app/clients");

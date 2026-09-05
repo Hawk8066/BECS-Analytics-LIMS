@@ -30,6 +30,28 @@ export type PartyPayable = {
   openBills: number;
 };
 
+/**
+ * Billed / paid / outstanding for one party's documents — vendor bills,
+ * outsource-lab bills, or client invoices. Each doc carries its gross `amount`
+ * and its own `payments`; payments have no direct counterparty FK, so "paid" is
+ * always summed from the documents here. Used by the per-counterparty detail
+ * and list views.
+ */
+export function docBalance(
+  docs: { amount: number; payments: { amount: number }[] }[],
+): { billed: number; paid: number; outstanding: number; openDocs: number } {
+  let billed = 0;
+  let paid = 0;
+  let openDocs = 0;
+  for (const d of docs) {
+    const p = d.payments.reduce((s, x) => s + x.amount, 0);
+    billed += d.amount;
+    paid += p;
+    if (d.amount - p > 0) openDocs += 1;
+  }
+  return { billed, paid, outstanding: billed - paid, openDocs };
+}
+
 export type FinanceSummary = {
   income: {
     /** Testing revenue net of sales tax (GL 4000). */

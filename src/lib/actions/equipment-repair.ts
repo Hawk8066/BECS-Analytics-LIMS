@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
+import { publish } from "@/lib/feed/publish";
 import {
   openRepairCase,
   issueGatePassFor,
@@ -16,6 +18,14 @@ import {
 // Thin wrappers over lib/equipment/repair.ts: parse the form, hand the work to
 // the core function, turn its thrown message into a field error the popup can
 // show. `ok` lets the popups close themselves.
+//
+// NOTE — authorization is enforced in the core module, not in these wrappers.
+// Every function in lib/equipment/repair.ts checks the actor's designation
+// before it mutates anything (openRepairCase/closeRepair/cancelRepair →
+// canManageEquipment, issueGatePassFor → canIssueGatePass,
+// receiveRepairedEquipment → canReceiveRepair, inspectRepair → canInspectGoods)
+// and also enforces facility scope, throwing prose that asError() surfaces.
+// So `requireUser()` alone here is deliberate — do not add a second gate.
 export type FormState = { error?: string; ok?: boolean };
 
 /** Core functions throw prose; anything else is a bug worth surfacing plainly. */
@@ -66,6 +76,21 @@ export async function requestRepair(
   } catch (e) {
     return asError(e);
   }
+
+  const eq = await prisma.equipment.findUnique({
+    where: { id: d.equipmentId },
+    select: { name: true },
+  });
+  // Before redirect() — redirect throws.
+  await publish({
+    template: "repairOpened",
+    params: {
+      equipment: eq?.name ?? "Equipment",
+      repairId,
+      site: d.site,
+    },
+    actor,
+  });
 
   revalidatePath(`/app/equipment/${d.equipmentId}`);
   revalidatePath("/app/procurement");
@@ -190,6 +215,16 @@ export async function returnRepairToService(
   } catch (e) {
     return asError(e);
   }
+
+  const repair = await prisma.equipmentRepair.findUnique({
+    where: { id: repairId },
+    select: { equipment: { select: { name: true } } },
+  });
+  await publish({
+    template: "repairClosed",
+    params: { equipment: repair?.equipment.name ?? "Equipment", repairId },
+    actor,
+  });
 
   revalidatePath(`/app/equipment/repairs/${repairId}`);
   revalidatePath("/app/equipment");

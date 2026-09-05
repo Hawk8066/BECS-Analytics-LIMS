@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { canApprovePR, canVerifyPR } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { createPRFromLines, type PRLineInput } from "@/lib/procurement/create-pr";
+import { publish } from "@/lib/feed/publish";
 import { isServiceCategory } from "@/lib/procurement/service";
 
 export type FormState = { error?: string };
@@ -63,6 +64,12 @@ export async function createPR(
     lines,
     String(formData.get("note") || ""),
   );
+  // Must precede redirect() — redirect throws, so nothing after it runs.
+  await publish({
+    template: "prRaised",
+    params: { prNo: pr.prNo, prId: pr.id, lines: lines.length },
+    actor,
+  });
   redirect(`/app/procurement/${pr.id}`);
 }
 
@@ -89,6 +96,14 @@ export async function verifyPR(formData: FormData): Promise<void> {
     after: { status: "VERIFIED" },
     facilityId: pr.facilityId,
     sectionId: pr.sectionId,
+  });
+  await publish({
+    template: "prVerified",
+    params: { prNo: pr.prNo, prId: id },
+    actor,
+    facilityId: pr.facilityId,
+    sectionId: pr.sectionId ?? actor.sectionId,
+    to: [pr.requestedById],
   });
   revalidatePath(`/app/procurement/${id}`);
 }
@@ -125,6 +140,14 @@ export async function approvePR(formData: FormData): Promise<void> {
     facilityId: pr.facilityId,
     sectionId: pr.sectionId,
   });
+  await publish({
+    template: "prApproved",
+    params: { prNo: pr.prNo, prId: id },
+    actor,
+    facilityId: pr.facilityId,
+    sectionId: pr.sectionId ?? actor.sectionId,
+    to: [pr.requestedById],
+  });
   revalidatePath(`/app/procurement/${id}`);
 }
 
@@ -150,6 +173,14 @@ export async function rejectPR(formData: FormData): Promise<void> {
     after: { status: "REJECTED" },
     facilityId: pr.facilityId,
     sectionId: pr.sectionId,
+  });
+  await publish({
+    template: "prRejected",
+    params: { prNo: pr.prNo, prId: id },
+    actor,
+    facilityId: pr.facilityId,
+    sectionId: pr.sectionId ?? actor.sectionId,
+    to: [pr.requestedById],
   });
   revalidatePath(`/app/procurement/${id}`);
 }

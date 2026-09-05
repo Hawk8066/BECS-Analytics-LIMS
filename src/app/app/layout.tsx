@@ -9,6 +9,10 @@ import {
   canRegisterOutsourceLab,
 } from "@/lib/auth/perms";
 import { readableFacilities } from "@/lib/facilities";
+import { getFeedSnapshot } from "@/lib/feed/query";
+import { FeedProvider } from "@/components/feed/feed-provider";
+import { NotificationBell } from "@/components/feed/notification-bell";
+import { NewsReel } from "@/components/feed/news-reel";
 import { NavLink } from "@/components/nav-link";
 import { NavSection } from "@/components/nav-section";
 import { BecsLogo } from "@/components/becs-logo";
@@ -34,6 +38,13 @@ export default async function AppLayout({
   const active = user.status === "ACTIVE";
   // Force the yearly undertaking before any app usage (first login + each 1 Jan).
   const undertakingDue = active ? await isUndertakingDue(user.id) : false;
+  // The undertaking gate is a hard block, so the feed stays hidden behind it too.
+  // Server-rendering the first snapshot avoids an empty-bell flash; the client
+  // then polls /api/feed for deltas.
+  const showFeed = active && !undertakingDue;
+  const feed = showFeed
+    ? await getFeedSnapshot(user)
+    : { unread: 0, inbox: [], tasks: [], reel: [], watermark: "" };
   // The per-lab registers get one nav entry per lab this user may read.
   const labs = active && !undertakingDue ? await readableFacilities(user) : [];
   // Each nav section carries its own tone so the sidebar can be scanned by
@@ -140,7 +151,12 @@ export default async function AppLayout({
               {
                 title: "Administration",
                 tone: "#7a3350",
-                items: [{ href: "/app/admin", label: "Data (Admin)" }],
+                items: [
+                  // Landing page for the section; the roles matrix nests under
+                  // it, so match exactly or both entries light up at once.
+                  { href: "/app/admin", label: "Data (Admin)", exact: true },
+                  { href: "/app/admin/roles", label: "Roles & Capabilities" },
+                ],
               },
             ]
           : []),
@@ -158,6 +174,7 @@ export default async function AppLayout({
   return (
     // On print, drop the sidebar/header and the full-height grid so only the
     // page content (e.g. a printable invoice) flows — no blank trailing pages.
+    <FeedProvider initial={feed}>
     <div className="grid min-h-svh grid-cols-[220px_1fr] print:block print:min-h-0">
       <aside className="flex flex-col gap-1 overflow-y-auto border-r bg-muted/30 p-4 print:hidden">
         <div className="mb-3 px-2">
@@ -194,16 +211,21 @@ export default async function AppLayout({
               </span>
             )}
           </div>
-          <form action={signOutAction}>
-            <Button variant="outline" size="sm" type="submit">
-              Sign out
-            </Button>
-          </form>
+          <div className="flex items-center gap-3">
+            {showFeed && <NotificationBell />}
+            <form action={signOutAction}>
+              <Button variant="outline" size="sm" type="submit">
+                Sign out
+              </Button>
+            </form>
+          </div>
         </header>
+        {showFeed && <NewsReel />}
         <main className="min-w-0 flex-1 p-6 print:p-0">
           {undertakingDue ? <UndertakingGate year={undertakingYear()} /> : children}
         </main>
       </div>
     </div>
+    </FeedProvider>
   );
 }

@@ -15,6 +15,7 @@ import {
   canMarkReceived,
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { inventoryCategoryFor } from "@/lib/inventory";
 import { isServiceCategory } from "@/lib/procurement/service";
@@ -48,6 +49,11 @@ export async function markReceived(formData: FormData): Promise<void> {
     entityId: receipt.id,
     after: { poId },
   });
+  await publish({
+    template: "goodsReceived",
+    params: { poNo: po.poNo, prId: po.prId },
+    actor,
+  });
   revalidatePath(`/app/procurement/${po.prId}`);
 }
 
@@ -67,7 +73,7 @@ export async function submitInspection(formData: FormData): Promise<void> {
 
   const receipt = await prisma.goodsReceipt.findUnique({
     where: { id: receiptId },
-    include: { po: { select: { prId: true } } },
+    include: { po: { select: { prId: true, poNo: true } } },
   });
   if (!receipt) throw new Error("Receipt not found.");
 
@@ -132,6 +138,15 @@ export async function submitInspection(formData: FormData): Promise<void> {
     entityType: "GoodsReceipt",
     entityId: receiptId,
     after: { decision },
+  });
+  await publish({
+    template: "goodsInspected",
+    params: {
+      poNo: receipt.po.poNo,
+      prId: receipt.po.prId,
+      decision: String(decision),
+    },
+    actor,
   });
   revalidatePath(`/app/procurement/${receipt.po.prId}`);
 }
@@ -241,6 +256,11 @@ export async function issueGRN(formData: FormData): Promise<void> {
     entityType: "GRN",
     entityId: grnNo,
     after: { lines: received.length },
+  });
+  await publish({
+    template: "grnIssued",
+    params: { grnNo, prId: receipt.po.prId },
+    actor,
   });
   revalidatePath(`/app/procurement/${receipt.po.prId}`);
   revalidatePath("/app/inventory");
@@ -361,6 +381,17 @@ export async function decideIssue(formData: FormData): Promise<void> {
     entityId: id,
     after: { status: decision },
     facilityId: issue.facilityId,
+  });
+  await publish({
+    template: "issueDecided",
+    params: {
+      item: issue.description,
+      qty: issue.quantity,
+      status: decision,
+    },
+    actor,
+    facilityId: issue.facilityId,
+    to: [issue.requestedById],
   });
   revalidatePath("/app/inventory");
   revalidatePath(`/app/inventory/${issue.fromStoreId}`);

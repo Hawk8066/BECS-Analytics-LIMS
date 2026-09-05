@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 
 // Bulk issue request from the reorder UI: move several items from the main
 // store to a destination store, one IssueRequest per line. Reads a shared
@@ -47,6 +48,20 @@ export async function requestIssues(formData: FormData): Promise<void> {
     entityId: toStoreId,
     after: { count: data.length, toStoreId, from: "main store" },
     facilityId: actor.facilityId,
+  });
+  const dest = await prisma.store.findUnique({
+    where: { id: toStoreId },
+    select: { name: true },
+  });
+  await publish({
+    template: "issueRequested",
+    params: {
+      item:
+        data.length === 1 ? data[0].description : `${data.length} items`,
+      qty: data.reduce((s, d) => s + d.quantity, 0),
+      toStore: dest?.name ?? "a sub-store",
+    },
+    actor,
   });
   revalidatePath(`/app/inventory/${toStoreId}`);
   revalidatePath("/app/inventory");

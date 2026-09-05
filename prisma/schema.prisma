@@ -41,7 +41,8 @@ enum Designation {
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
-  ANALYST
+  ANALYST // bench analyst, Lahore
+  ANALYST_RYK // bench analyst, Rahim Yar Khan on-site QC lab
   LAB_ASSISTANT
   LAB_ATTENDANT
   LIAISON_OFFICER
@@ -307,6 +308,7 @@ model User {
   approvals         ApprovalStep[]
   signatures        Signature[]
   notifications     Notification[]
+  feedEvents        FeedEvent[]               @relation("FeedActor")
   attendances       Attendance[]
   leaveApplications LeaveApplication[]        @relation("LeaveApplicant")
   leaveDecisions    LeaveApplication[]        @relation("LeaveApprover")
@@ -446,6 +448,17 @@ model UserRole {
   role   Role   @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
+}
+
+// Admin-configurable Tier-1 capability matrix (SSOT §6). A row exists ONLY for a
+// capability whose designation set the super-admin has changed from the built-in
+// default in src/lib/auth/capabilities.ts — no row means "use the default".
+// ADMIN passes every capability implicitly and is never stored here.
+model CapabilityGrant {
+  capability   String        @id // e.g. "viewFinance", "manageStore"
+  designations Designation[]
+  updatedById  String?
+  updatedAt    DateTime      @updatedAt
 }
 
 // ----------------------------------------------------------------------------
@@ -611,18 +624,47 @@ model Sequence {
   @@index([key])
 }
 
+// A targeted, per-recipient notice (the bell's "Inbox" tab). Text is NOT stored:
+// `template` + `params` are rendered per viewer at read time through
+// src/lib/feed/render.ts, so one event yields one row per recipient yet still
+// respects that viewer's blinding (client identity) at the moment they read it.
+// Standing work ("3 PRs await you") is NOT stored here — it is derived live by
+// the task providers in src/lib/feed/tasks.ts, so it can never go stale.
 model Notification {
   id        String    @id @default(uuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id])
-  kind      String // "APPROVAL_PENDING", "CALIBRATION_DUE", ...
-  title     String
-  body      String?
-  link      String?
+  kind      String // coarse grouping for icon/colour
+  template  String // key into src/lib/feed/templates.ts
+  params    Json
+  actorId   String?
+  dedupeKey String? // "<template>:<subjectId>"; NULLs never collide in Postgres
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
-  @@index([userId])
+  @@unique([userId, dedupeKey]) // with createMany({skipDuplicates}) => idempotent
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt]) // retention prune
+}
+
+// A broadcast activity item for the news reel. Audience is a CAPABILITY KEY, not
+// a designation list, because the capability matrix is admin-mutable at runtime —
+// storing the key lets the audience re-resolve live instead of going stale.
+// facilityId/sectionId are NOT NULL so a scoped read can never silently drop rows
+// (the flaw that rules out deriving the reel from AuditLog).
+model FeedEvent {
+  id          String   @id @default(uuid())
+  template    String // key into src/lib/feed/templates.ts (drives render + href)
+  params      Json
+  audienceKey String // CapabilityKey — the capability that gates READING the page
+  facilityId  String
+  sectionId   String
+  actorId     String?
+  actor       User?    @relation("FeedActor", fields: [actorId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([facilityId, sectionId, createdAt])
+  @@index([createdAt]) // retention prune
 }
 
 // ----------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canManageOutsourceBilling } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { postJournal } from "@/lib/finance/posting";
 import { expenseAccountFor, sourceAccountFor } from "@/lib/finance/accounts";
@@ -87,6 +88,14 @@ export async function recordExpense(
     entityId: expense.id,
     after: { expenseNo, category, amount, payee, paidFrom },
     facilityId: actor.facilityId,
+  });
+  await publish({
+    template: "expenseRecorded",
+    params: {
+      category: String(category),
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
   });
 
   revalidatePath("/app/finance/expenses");

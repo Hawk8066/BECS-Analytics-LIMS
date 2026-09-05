@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { saveFile } from "@/lib/storage/local";
 
 export type FormState = { error?: string; ok?: boolean };
@@ -136,6 +137,16 @@ export async function completeOwnProfile(
     after: { status: "PENDING_APPROVAL" },
     facilityId: actor.facilityId,
     sectionId: actor.sectionId,
+  });
+  const me = await prisma.personnelProfile.findUnique({
+    where: { userId: actor.id },
+    select: { fullName: true },
+  });
+  // Before the redirect() below.
+  await publish({
+    template: "profileSubmitted",
+    params: { who: me?.fullName ?? actor.email, userId: actor.id },
+    actor,
   });
 
   revalidatePath("/app");
@@ -633,6 +644,18 @@ export async function approveProfile(formData: FormData): Promise<void> {
     after: { status: "ACTIVE" },
     facilityId: target.facilityId,
     sectionId: target.sectionId,
+  });
+  const approved = await prisma.personnelProfile.findUnique({
+    where: { userId },
+    select: { fullName: true },
+  });
+  await publish({
+    template: "profileApproved",
+    params: { who: approved?.fullName ?? target.email, userId },
+    actor,
+    facilityId: target.facilityId,
+    sectionId: target.sectionId,
+    to: [userId], // approval unblocks the whole app for them
   });
 
   revalidatePath("/app/personnel");

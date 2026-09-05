@@ -7,6 +7,7 @@ import {
   canManageOutsourceBilling,
   canViewFinance,
 } from "@/lib/auth/perms";
+import { docBalance } from "@/lib/finance/summary";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -65,6 +66,7 @@ export default async function OutsourceLabHubPage({
     prisma.outsourceBill.findMany({
       where: { outsourceLabId: id },
       orderBy: { createdAt: "desc" },
+      include: { payments: { select: { amount: true } } },
     }),
     // Every parameter ever outsourced to this lab (the exact rows to price — the
     // full parameter master would list same-name tests across many matrices).
@@ -99,6 +101,7 @@ export default async function OutsourceLabHubPage({
     sampleType: sp.sample.sampleType,
     price: priceByParam.get(sp.parameterId) ?? null,
   }));
+  const bal = docBalance(bills);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -178,43 +181,91 @@ export default async function OutsourceLabHubPage({
         <CardHeader>
           <CardTitle className="text-base">Bills</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {bills.length === 0 ? (
             <p className="text-sm text-muted-foreground">No bills recorded yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Bill No</TableHead>
-                  <TableHead>Lab invoice #</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bills.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link
-                        href={`/app/finance/outsource-bills/${b.id}`}
-                        className="hover:underline"
-                      >
-                        {b.billNo}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {b.labInvoiceNo || "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{pkr(b.amount)}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>
-                        {b.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Billed
+                  </p>
+                  <div className="text-base font-semibold tabular-nums">
+                    {pkr(bal.billed)}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Paid
+                  </p>
+                  <div className="text-base font-semibold tabular-nums">
+                    {pkr(bal.paid)}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Payable
+                  </p>
+                  <div className="text-base font-semibold tabular-nums">
+                    {pkr(bal.outstanding)}
+                  </div>
+                  {bal.openDocs > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {bal.openDocs} open bill{bal.openDocs === 1 ? "" : "s"}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bill No</TableHead>
+                      <TableHead>Lab invoice #</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bills.map((b) => {
+                      const paid = b.payments.reduce((s, p) => s + p.amount, 0);
+                      return (
+                        <TableRow key={b.id}>
+                          <TableCell className="font-mono text-xs">
+                            <Link
+                              href={`/app/finance/outsource-bills/${b.id}`}
+                              className="hover:underline"
+                            >
+                              {b.billNo}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {b.labInvoiceNo || "—"}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pkr(b.amount)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pkr(paid)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {pkr(b.amount - paid)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={STATUS_VARIANT[b.status] ?? "secondary"}>
+                              {b.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

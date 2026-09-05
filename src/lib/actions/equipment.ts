@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canManageEquipment } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { facilityByCode } from "@/lib/facilities";
 
@@ -239,6 +240,19 @@ export async function addCalibration(
       calibratedBy: calibrator.calibratedBy,
       certificateNo: d.certificateNo ?? null,
     },
+  });
+  const eq = await prisma.equipment.findUnique({
+    where: { id: d.equipmentId },
+    select: { name: true },
+  });
+  await publish({
+    template: "calibrationRecorded",
+    params: {
+      equipment: eq?.name ?? "Equipment",
+      equipmentId: d.equipmentId,
+      validUntil: d.validUntil,
+    },
+    actor,
   });
 
   revalidatePath(`/app/equipment/${d.equipmentId}`);
