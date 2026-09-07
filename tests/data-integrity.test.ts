@@ -153,6 +153,36 @@ describe("BR-10 · stores & inventory", () => {
   });
 });
 
+describe("monthly production-QC billing", () => {
+  it("no QC lot is billed twice, and a billed lot is always approved", async () => {
+    const billed = await prisma.qcLot.findMany({
+      where: { invoiceId: { not: null } },
+      select: { lotNo: true, status: true },
+    });
+    // invoiceId is a single FK, so double-billing can only show up as a lot
+    // billed while not approved — which means it was billed out of workflow.
+    expect(billed.filter((l) => l.status !== "APPROVED").map((l) => l.lotNo)).toEqual([]);
+  });
+
+  it("a consolidated invoice totals exactly the lots it bills", async () => {
+    const invoices = await prisma.invoice.findMany({
+      where: { qcLots: { some: {} } },
+      select: {
+        invoiceNo: true,
+        amount: true,
+        items: { select: { price: true, discount: true } },
+        _count: { select: { qcLots: true } },
+      },
+    });
+    const bad = invoices.filter((i) => {
+      const lines = i.items.reduce((s, it) => s + it.price - it.discount, 0);
+      // One line per lot, and the invoice total is those lines.
+      return lines !== i.amount || i.items.length !== i._count.qcLots;
+    });
+    expect(bad.map((i) => i.invoiceNo)).toEqual([]);
+  });
+});
+
 describe("payroll", () => {
   it("net pay equals gross less all deductions on every payroll item", async () => {
     const items = await prisma.payrollItem.findMany();

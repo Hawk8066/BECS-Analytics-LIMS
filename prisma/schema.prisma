@@ -251,9 +251,17 @@ model Facility {
   name      String
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+  // The client this facility's production-QC output is consolidated onto — the
+  // RYK monthly invoice to Bio Tech Fertilizers (SSOT §3). Held here rather than
+  // inferred from the client's own facility, because BECS registers the company
+  // against Lahore while the QC work is performed at RYK.
+  qcBillingClientId String?
+  qcBillingClient   Client?  @relation("FacilityQcBillingClient", fields: [qcBillingClientId], references: [id])
 
   sections Section[]
   users    User[]
+
+  @@index([qcBillingClientId])
 }
 
 model Section {
@@ -752,6 +760,7 @@ model Client {
 
   samples              Sample[]
   invoices             Invoice[]
+  qcBilledFacilities   Facility[]      @relation("FacilityQcBillingClient")
   portalUsers          User[]          @relation("ClientPortalUser")
   testQuotations       TestQuotation[]
   referredThirdParties ThirdParty[]
@@ -859,6 +868,7 @@ model Parameter {
   createdAt     DateTime  @default(now())
 
   sampleParameters   SampleParameter[]
+  qcProductTypes     ProductType[]
   sectorPrices       ParameterSectorPrice[]
   outsourceLabPrices OutsourceLabPrice[]
   priceHistory       ParameterPriceHistory[]
@@ -1695,6 +1705,7 @@ model Invoice {
 
   items    InvoiceItem[]
   payments Payment[]
+  qcLots   QcLot[]
 
   @@index([clientId])
   @@index([facilityId])
@@ -2030,12 +2041,20 @@ model ProductType {
   parentType    ProductType?  @relation("ProductLineage", fields: [parentTypeId], references: [id])
   children      ProductType[] @relation("ProductLineage")
   sortOrder     Int           @default(0)
+  // The Parameter master row this product's test is billed at. The RYK monthly
+  // consolidated invoice prices every approved lot from this parameter's rate,
+  // so pricing lives in one place (Parameters) and is never retyped here.
+  // Unset — or set to a parameter with no price — means the product is not
+  // billable yet: its lots are skipped and stay open for a later run.
+  parameterId   String?
+  parameter     Parameter?    @relation(fields: [parameterId], references: [id])
   facilityId    String
   createdAt     DateTime      @default(now())
 
   lots QcLot[]
 
   @@unique([facilityId, name])
+  @@index([parameterId])
 }
 
 // A physical lot sampled for QC — a vehicle load or a production batch. Carries
@@ -2062,6 +2081,11 @@ model QcLot {
   testedAt      DateTime?
   approvedById  String? // Lab Manager who reviewed
   approvedAt    DateTime?
+  // Set when the lot is billed on a monthly consolidated invoice. Non-null means
+  // billed: the generator only ever picks up lots where this is null, which is
+  // what makes month-end generation idempotent and stops double-billing.
+  invoiceId     String?
+  invoice       Invoice?    @relation(fields: [invoiceId], references: [id])
   facilityId    String
   createdAt     DateTime    @default(now())
 
@@ -2069,6 +2093,7 @@ model QcLot {
   children QcLotLink[] @relation("LotParent")
 
   @@index([productTypeId])
+  @@index([invoiceId])
   @@index([facilityId])
   @@index([status])
   @@index([assignedToId])
