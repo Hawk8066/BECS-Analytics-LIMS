@@ -45,7 +45,12 @@ export async function saveFile(
   // is only ever cosmetic in the Supabase dashboard.
   const { error } = await client()
     .storage.from(bucket())
-    .upload(storageKey, buffer, { upsert: false });
+    .upload(storageKey, buffer, {
+      upsert: false,
+      // Explicit, because supabase-js defaults an ArrayBufferView to
+      // "text/plain;charset=utf-8" — never let a charset near binary bytes.
+      contentType: "application/octet-stream",
+    });
   if (error) throw new Error(`Storage upload failed: ${error.message}`);
 
   return { storageKey, sha256 };
