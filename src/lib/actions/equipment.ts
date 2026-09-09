@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { canManageEquipment } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { nextNumber } from "@/lib/numbering";
-import { saveFile } from "@/lib/storage/local";
+import { saveFile } from "@/lib/storage";
 
 export type FormState = { error?: string };
 

@@ -1,18 +1,18 @@
 import { writeFile, mkdir, readFile as fsReadFile } from "fs/promises";
 import path from "path";
-import { createHash } from "crypto";
+import { sha256Of, storageKeyFor } from "./shared";
 
-// Local-filesystem object storage for dev (gitignored ./storage). Swappable for
-// S3/MinIO later behind the same Attachment model (SSOT §14).
+// Local-filesystem object storage for dev (gitignored ./storage). This is the
+// default driver so `npm run dev` needs no cloud account; it is NOT usable in the
+// cloud, where the container filesystem is ephemeral (see ./supabase).
 const ROOT = path.join(process.cwd(), "storage");
 
 export async function saveFile(
   buffer: Buffer,
   opts: { dir: string; fileName: string },
 ): Promise<{ storageKey: string; sha256: string }> {
-  const sha256 = createHash("sha256").update(buffer).digest("hex");
-  const safe = opts.fileName.replace(/[^\w.\-]+/g, "_");
-  const key = `${opts.dir}/${Date.now()}-${safe}`;
+  const sha256 = sha256Of(buffer);
+  const key = storageKeyFor(opts);
   const abs = path.join(ROOT, key);
   await mkdir(path.dirname(abs), { recursive: true });
   await writeFile(abs, buffer);

@@ -1,0 +1,113 @@
+# Deployment
+
+Production runs on **Render** (Next.js server) with **Supabase** (Postgres + object
+storage). Rationale and rejected alternatives are in
+[ADR-0005](docs/adr/0005-cloud-deployment.md).
+
+```
+GitHub main ──push──> Render web service (auto-deploy)
+                        Next.js 16 Node server · free tier · 512 MB
+                          ├── Prisma ──────> Supabase Postgres (pooler :6543)
+                          └── supabase-js ─> Supabase Storage (private bucket)
+```
+
+## Environment variables
+
+Set these on the Render service. Nothing here belongs in the repository.
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | Supabase **pooled** connection, port **6543**, with `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | yes | Supabase **direct** connection, port **5432**. Migrations only — but Prisma fails validation if unset, so it must always be present |
+| `AUTH_SECRET` | yes | `openssl rand -base64 32` |
+| `AUTH_URL` | yes | Full public URL, e.g. `https://becs-lims.onrender.com` |
+| `AUTH_TRUST_HOST` | yes | `true` — required behind Render's proxy |
+| `STORAGE_DRIVER` | yes | `supabase` in the cloud. Defaults to `local`, which **loses every uploaded file on restart** |
+| `SUPABASE_URL` | yes | `https://<project-ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | **Secret.** Bypasses row-level security. Never prefix with `NEXT_PUBLIC_` |
+| `SUPABASE_STORAGE_BUCKET` | no | Defaults to `becs-lims` |
+| `NODE_ENV` | yes | `production` |
+
+> `STORAGE_DRIVER` is the one that fails quietly. With it unset the app boots, accepts
+> uploads, and serves them — until the next restart, when every file is gone. Check it
+> first if attachments vanish.
+
+## Render service settings
+
+- Type: **Web Service** (not Static Site — the app is server-rendered)
+- Build: `npm ci && npx prisma generate && npm run build`
+- Start: `npm run start`
+- Health check path: `/login`
+- Instance type: Free
+
+Builds run on Render's Starter build pipeline (2 CPU / 8 GB), **not** on the 512 MB
+instance, so the ~1 GB build has ample headroom. The running server idles around
+**173 MB**, well inside 512 MB.
+
+## Database migrations
+
+Migrations are **deliberately manual**. Deploying does not migrate.
+
+```bash
+# Against DIRECT_URL (port 5432) — never the pooler
+DIRECT_URL="postgresql://...:5432/postgres" \
+DATABASE_URL="postgresql://...:5432/postgres" \
+  npx prisma migrate deploy
+```
+
+First-time setup only:
+
+```bash
+npm run db:seed                                    # facilities + sections
+ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run db:admin # super-admin account
+```
+
+`npm run db:seed` also creates dev users with a shared known password — review
+`prisma/seed.ts` before running it against anything real.
+
+## Runbook
+
+**Deploy.** Merge to `main`. Render builds and deploys automatically; GitHub Actions
+runs the build gate in parallel (see `.github/workflows/ci.yml`).
+
+**Roll back.** Render dashboard → service → *Events* → *Rollback* on the last good
+deploy. Rolling back application code does **not** roll back a database migration; if
+the bad deploy included one, reverse it by hand first.
+
+**First request is slow.** Expected. Render free spins the service down after 15
+minutes idle; the next request takes ~50 s to wake it. Not a fault.
+
+**Supabase project paused.** Free projects pause after 7 days with no requests.
+Resume from the Supabase dashboard; data is retained.
+
+**Attachments 404 after a redeploy.** `STORAGE_DRIVER` is not set to `supabase`.
+Files written while it was wrong are gone — the disk they were on no longer exists.
+
+**Switching storage drivers.** Storage keys are driver-agnostic but files are not
+copied automatically. Existing `Attachment` rows point at objects that only the
+driver that wrote them can read, so copy the underlying files across before
+switching, or old attachments will 404.
+
+## Free-tier limits to watch
+
+| Limit | Value | First to bind? |
+|---|---|---|
+| Supabase object storage | 1 GB | **Yes** — raw-data photos accumulate |
+| Supabase database | 500 MB | No — years of records |
+| Supabase egress | 5 GB/month | Watch alongside storage |
+| Render instance hours | 750/month | Fine for one service |
+| Render build minutes | 500/month | Build is ~15 s |
+
+When storage runs out, the cheapest move is Cloudflare R2 (10 GB free, no egress
+fees) — a new driver in `src/lib/storage/`, no call-site changes.
+
+## Known gaps
+
+- **No backups configured.** The Supabase free tier does not include point-in-time
+  recovery. Before this holds real accredited-lab records, schedule `pg_dump` or move
+  to a paid tier.
+- **No background worker.** [SSOT §14](docs/SSOT.md#14-technology-stack--architecture-summary)
+  assumes pg-boss for due/expiry alerts and report sealing; none exists yet, and
+  Render free has no worker service.
+- **7 pre-existing lint errors on `main`**, so the CI lint job is non-blocking. Once
+  cleared, remove `continue-on-error` from `.github/workflows/ci.yml`.

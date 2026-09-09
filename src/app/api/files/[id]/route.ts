@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { loadFile } from "@/lib/storage/local";
+import { loadFile } from "@/lib/storage";
 
 export const runtime = "nodejs";
 

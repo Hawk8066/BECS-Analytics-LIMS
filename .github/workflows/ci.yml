@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Prisma Client is generated code and is not committed, so nothing type-checks
+      # until this runs.
+      - run: npx prisma generate
+
+      # `next build` type-checks as part of the build (Turbopack), so this single
+      # step covers both. A standalone `tsc --noEmit` cannot run first: Next
+      # rewrites next-env.d.ts to reference .next/types/routes.d.ts, which does not
+      # exist until a build has happened.
+      # Verified: the build needs no DATABASE_URL/DIRECT_URL/AUTH_SECRET. Nothing
+      # connects to the database at build time, and `prisma generate` (unlike
+      # `prisma validate`) does not resolve env vars.
+      - name: Build
+        run: npm run build
+
+  lint:
+    name: Lint (non-blocking)
+    runs-on: ubuntu-latest
+    # NOTE: `main` already carries 7 pre-existing eslint errors (react-hooks
+    # set-state-in-effect in the personnel sections, plus finance/page.tsx). This job
+    # reports them without blocking deploys. Once the dev team clears them, delete
+    # this line so lint becomes a real gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
