@@ -1,0 +1,70 @@
+# Render Blueprint — infrastructure as code for the BECS Analytics LIMS.
+# See DEPLOYMENT.md for the runbook and docs/adr/0005-cloud-deployment.md for why
+# this app runs as a long-running Node web service rather than on serverless.
+#
+# Postgres and object storage are NOT declared here: both live on Supabase, so the
+# connection strings and keys are entered once at Blueprint creation.
+
+services:
+  - type: web
+    name: becs-lims
+    runtime: node
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npm run start
+
+    # /login renders without touching the database, so a failing health check means
+    # the server is genuinely down rather than the database being unreachable.
+    healthCheckPath: /login
+
+    envVars:
+      # --- Set once, here. These are the values that must not drift. ---
+
+      # The silent failure mode: with this unset the app boots, accepts uploads and
+      # serves them, then loses every file on the next restart. Pinned in code so it
+      # cannot be forgotten in the dashboard.
+      - key: STORAGE_DRIVER
+        value: supabase
+
+      # Required behind Render's proxy, or Auth.js rejects the forwarded host.
+      - key: AUTH_TRUST_HOST
+        value: true
+
+      - key: NODE_ENV
+        value: production
+
+      - key: SUPABASE_STORAGE_BUCKET
+        value: becs-lims
+
+      # Render generates a base64 256-bit value on first sync and never shows it
+      # again — which is exactly right for a session secret. Rotating it signs
+      # everyone out; that is the intended blast radius.
+      - key: AUTH_SECRET
+        generateValue: true
+
+      # --- Prompted at Blueprint creation. Values come from Supabase. ---
+
+      # Supabase POOLED connection, port 6543, with
+      # ?pgbouncer=true&connection_limit=1 appended.
+      - key: DATABASE_URL
+        sync: false
+
+      # Supabase DIRECT connection, port 5432. Migrations cannot run through the
+      # pooler. Required even though the app never queries through it: Prisma fails
+      # schema validation when it is unset.
+      - key: DIRECT_URL
+        sync: false
+
+      - key: SUPABASE_URL
+        sync: false
+
+      # Service-role key. Bypasses row-level security; server-side only.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+# AUTH_URL is deliberately absent. Auth.js v5 infers the origin from the forwarded
+# host when AUTH_TRUST_HOST=true, and the service URL is not known until after the
+# first deploy. Set it in the dashboard only if redirects misbehave.
