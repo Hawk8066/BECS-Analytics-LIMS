@@ -14,7 +14,13 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
+  // Pooled connection (Supabase Supavisor, :6543) for application queries.
   url        = env("DATABASE_URL")
+  // Direct connection (:5432). Migrations and introspection cannot run through a
+  // transaction pooler, so Prisma needs this separate route. REQUIRED — Prisma
+  // fails validation if it is unset, so local/docker-compose setups must define
+  // it too (same value as DATABASE_URL there). See .env.example.
+  directUrl  = env("DIRECT_URL")
   extensions = [citext, pgcrypto]
 }
 
