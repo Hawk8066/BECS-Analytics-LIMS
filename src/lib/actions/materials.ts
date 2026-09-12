@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canManageMaterials } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { saveFile } from "@/lib/storage/local";
+import { saveFile } from "@/lib/storage";
 
 export type FormState = { error?: string };
 

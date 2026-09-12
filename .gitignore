@@ -49,7 +49,6 @@ coverage/
 # Pre-existing Claude-skills marketplace template (unrelated to this LIMS repo)
 .claude/
 .claude-plugin/
-.github/
 
 # Local tooling artifacts (not project code)
 .claude-ease/
