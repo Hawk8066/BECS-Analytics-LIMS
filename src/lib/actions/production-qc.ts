@@ -8,8 +8,10 @@ import {
   canManageProductionQc,
   canApproveLot,
   canSubmitResult,
+  ANALYST_DESIGNATIONS,
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 
 export type FormState = { error?: string };
@@ -19,7 +21,7 @@ async function isRykAnalyst(userId: string): Promise<boolean> {
   const n = await prisma.user.count({
     where: {
       id: userId,
-      designation: "ANALYST",
+      designation: { in: [...ANALYST_DESIGNATIONS] },
       status: "ACTIVE",
       facility: { code: "RYK" },
     },
@@ -117,6 +119,13 @@ export async function bookLot(
     after: { lotNo, product: product.name, refNo, parents: parentIds.length },
     facilityId: product.facilityId,
   });
+  await publish({
+    template: "qcLotBooked",
+    params: { lotNo, lotId: lot.id, product: product.name },
+    actor,
+    facilityId: product.facilityId,
+    to: [lot.assignedToId],
+  });
 
   revalidatePath("/btf-qc");
   redirect(`/btf-qc/${lot.id}`);
@@ -168,6 +177,12 @@ export async function enterResult(
     entityType: "QcLot",
     entityId: lotId,
     after: { resultValue: value, verdict, status: "SUBMITTED" },
+    facilityId: lot.facilityId,
+  });
+  await publish({
+    template: "qcResultSubmitted",
+    params: { lotNo: lot.lotNo, lotId },
+    actor,
     facilityId: lot.facilityId,
   });
 
@@ -230,6 +245,13 @@ export async function decideLot(formData: FormData): Promise<void> {
     entityId: lotId,
     after: { status },
     facilityId: lot.facilityId,
+  });
+  await publish({
+    template: "qcLotDecided",
+    params: { lotNo: lot.lotNo, lotId, status },
+    actor,
+    facilityId: lot.facilityId,
+    to: [lot.assignedToId, lot.testedById],
   });
 
   revalidatePath("/btf-qc");

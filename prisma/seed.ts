@@ -1,6 +1,7 @@
 import { PrismaClient, type Designation, type SectionType } from "@prisma/client";
 import { hash } from "argon2";
 import { createHash } from "crypto";
+import { ACCOUNTS } from "../src/lib/finance/accounts";
 
 // Seeds facilities, sections, dev users, and a few functions (SSOT §4, §6).
 // Run with: npx prisma db seed  (requires a running database).
@@ -53,6 +54,7 @@ async function main() {
     { email: "om@becs.test", designation: "OPERATIONS_MANAGER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Operations Manager" },
     { email: "labmanager.ryk@becs.test", designation: "LAB_MANAGER_RYK", facilityId: ryk.id, sectionId: "RYK_LAB", fullName: "Lab Manager (RYK)" },
     { email: "analyst@becs.test", designation: "ANALYST", facilityId: lahore.id, sectionId: "LAHORE_LAB", fullName: "Lahore Analyst" },
+    { email: "analyst.ryk@becs.test", designation: "ANALYST_RYK", facilityId: ryk.id, sectionId: "RYK_LAB", fullName: "RYK Analyst" },
     { email: "liaison@becs.test", designation: "LIAISON_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Liaison Officer" },
     { email: "purchaser@becs.test", designation: "PURCHASE_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Purchase Officer" },
     { email: "accountant@becs.test", designation: "ACCOUNTANT", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Accountant" },
@@ -341,19 +343,9 @@ async function main() {
   }
 
   // --- Chart of accounts (double-entry GL, ADR-0004) ---
-  const accounts: { code: string; name: string; type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE" }[] = [
-    { code: "1000", name: "Cash", type: "ASSET" },
-    { code: "1010", name: "Bank", type: "ASSET" },
-    { code: "1100", name: "Accounts Receivable", type: "ASSET" },
-    { code: "1150", name: "Input Tax Recoverable", type: "ASSET" },
-    { code: "2000", name: "Accounts Payable", type: "LIABILITY" },
-    { code: "2100", name: "Sales Tax Payable", type: "LIABILITY" },
-    { code: "3000", name: "Owner's Equity", type: "EQUITY" },
-    { code: "4000", name: "Sales Revenue", type: "REVENUE" },
-    { code: "5000", name: "Operating Expenses", type: "EXPENSE" },
-    { code: "5100", name: "Payroll Expense", type: "EXPENSE" },
-  ];
-  for (const a of accounts) {
+  // The list lives in src/lib/finance/accounts.ts so the app and the seed can't
+  // disagree about which codes exist.
+  for (const a of ACCOUNTS) {
     await prisma.chartOfAccount.upsert({
       where: { code: a.code },
       update: {},

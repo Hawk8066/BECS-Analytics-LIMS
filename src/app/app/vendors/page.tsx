@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canRegisterVendor } from "@/lib/auth/perms";
+import { canRegisterVendor, canViewFinance } from "@/lib/auth/perms";
+import { docBalance } from "@/lib/finance/summary";
+import { Money } from "@/components/finance/money";
 import { buttonVariants } from "@/components/ui/button";
 import { ImportExcel } from "@/components/import-excel";
 import {
@@ -19,7 +21,13 @@ export default async function VendorsPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const vendors = await prisma.vendor.findMany({ orderBy: { createdAt: "desc" } });
+  const showFinance = canViewFinance(user.designation);
+  const vendors = await prisma.vendor.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      bills: { select: { amount: true, payments: { select: { amount: true } } } },
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -46,6 +54,9 @@ export default async function VendorsPage() {
               <TableHead>Fields</TableHead>
               <TableHead>NTN</TableHead>
               <TableHead>Contact</TableHead>
+              {showFinance && (
+                <TableHead className="text-right">Outstanding</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -74,11 +85,19 @@ export default async function VendorsPage() {
                 <TableCell className="text-muted-foreground">
                   {v.contactNumber || "—"}
                 </TableCell>
+                {showFinance && (
+                  <TableCell className="text-right">
+                    <Money value={docBalance(v.bills).outstanding} />
+                  </TableCell>
+                )}
               </TableRow>
             ))}
             {vendors.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={showFinance ? 6 : 5}
+                  className="text-center text-muted-foreground"
+                >
                   No vendors yet.
                 </TableCell>
               </TableRow>

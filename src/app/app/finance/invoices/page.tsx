@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { canIssueInvoice, canViewFinance } from "@/lib/auth/perms";
+import { sweepMonthlyQcInvoices } from "@/lib/finance/qc-invoice-sweep";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,6 +31,10 @@ export default async function InvoicesPage() {
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canViewFinance(user.designation) && !canIssueInvoice(user.designation))
     redirect("/app");
+
+  // Raise any monthly consolidated invoice a closed month is still owed, so the
+  // register is complete when finance looks at it. Idempotent and self-throttled.
+  await sweepMonthlyQcInvoices();
 
   const invoices = await prisma.invoice.findMany({
     where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },

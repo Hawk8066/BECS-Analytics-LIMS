@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canApprovePayroll, canManagePayroll } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { postJournal } from "@/lib/finance/posting";
 import { computePayrollItem } from "@/lib/finance/payroll";
 
@@ -31,6 +32,7 @@ export async function setSalaryStructure(formData: FormData): Promise<void> {
     conveyance: toPaisa(formData.get("conveyance")),
     medical: toPaisa(formData.get("medical")),
     otherAllowances: toPaisa(formData.get("otherAllowances")),
+    cashAllowance: toPaisa(formData.get("cashAllowance")),
     providentFundPct: toInt(formData.get("providentFundPct")),
     eobi: toPaisa(formData.get("eobi")),
   };
@@ -82,6 +84,7 @@ export async function createPayrollRun(formData: FormData): Promise<void> {
           return {
             userId: s.userId,
             gross: c.gross,
+            cashAllowance: c.cashAllowance,
             incomeTax: c.incomeTax,
             providentFund: c.providentFund,
             eobi: c.eobi,
@@ -99,6 +102,12 @@ export async function createPayrollRun(formData: FormData): Promise<void> {
     entityId: run.id,
     after: { runNo, items: structures.length },
     facilityId: actor.facilityId,
+  });
+  // Must precede redirect() — redirect throws.
+  await publish({
+    template: "payrollRunPrepared",
+    params: { runNo, runId: run.id, employees: structures.length },
+    actor,
   });
   redirect(`/app/finance/payroll/${run.id}`);
 }
@@ -147,6 +156,12 @@ export async function approvePayrollRun(formData: FormData): Promise<void> {
     entityType: "PayrollRun",
     entityId: id,
     after: { status: "APPROVED", gross, net },
+    facilityId: run.facilityId,
+  });
+  await publish({
+    template: "payrollRunApproved",
+    params: { runNo: run.runNo, runId: id },
+    actor,
     facilityId: run.facilityId,
   });
   revalidatePath(`/app/finance/payroll/${id}`);

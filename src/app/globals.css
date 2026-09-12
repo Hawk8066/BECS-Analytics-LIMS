@@ -4,6 +4,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* News-reel ticker. Kept in its own @theme block because `@theme inline` below
+   is the shadcn design-token bridge. The strip renders its items twice and
+   translates by -50%, so the loop repeats seamlessly with no width measurement. */
+@theme {
+  --animate-marquee: marquee 45s linear infinite;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

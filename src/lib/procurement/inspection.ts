@@ -8,7 +8,13 @@ export type Section = "chemical" | "equipment" | "material";
 
 export function inspectionSection(category: ItemCategory): Section {
   if (category === "CHEMICAL" || category === "CRM") return "chemical";
-  if (category === "EQUIPMENT" || category === "EQUIPMENT_SUPPLY")
+  // Repair work is inspected as equipment (specs + packing) — asking "quantity
+  // as per order" of a repair makes no sense.
+  if (
+    category === "EQUIPMENT" ||
+    category === "EQUIPMENT_SUPPLY" ||
+    category === "EQUIPMENT_REPAIR"
+  )
     return "equipment";
   return "material";
 }

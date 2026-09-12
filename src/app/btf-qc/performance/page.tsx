@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canManageProductionQc } from "@/lib/auth/perms";
+import { ANALYST_DESIGNATIONS, canManageProductionQc } from "@/lib/auth/perms";
 import { formatDate } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +70,11 @@ export default async function ProductionPerformancePage() {
     prisma.productType.findMany({ select: { id: true, name: true, unit: true } }),
     // Production QC is run at RYK; that's the analyst pool for this board.
     prisma.user.findMany({
-      where: { designation: "ANALYST", status: "ACTIVE", facility: { code: "RYK" } },
+      where: {
+        designation: { in: [...ANALYST_DESIGNATIONS] },
+        status: "ACTIVE",
+        facility: { code: "RYK" },
+      },
       select: { id: true, email: true, profile: { select: { fullName: true } } },
     }),
   ]);

@@ -10,6 +10,7 @@ import {
   canSelectQuotation,
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 
 function toPaisa(pkr: string): number {
@@ -296,6 +297,13 @@ export async function generatePO(formData: FormData): Promise<void> {
     after: { prId, count: toCreate.length },
     facilityId: pr.facilityId,
     sectionId: pr.sectionId,
+  });
+  await publish({
+    template: "poGenerated",
+    params: { poNo: toCreate.map((p) => p.poNo).join(", "), prId },
+    actor,
+    facilityId: pr.facilityId,
+    sectionId: pr.sectionId ?? actor.sectionId,
   });
   revalidatePath(`/app/procurement/${prId}`);
 }

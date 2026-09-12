@@ -1,8 +1,10 @@
 # BECS Analytics LIMS — Single Source of Truth (SSOT)
 
-> **Status:** Draft v1 · **Owner:** BECS Analytics · **Audience:** product, engineering, QA, lab management
+> **Status:** v2 (living) — reconciled with the implemented build · **Owner:** BECS Analytics · **Audience:** product, engineering, QA, lab management
 >
 > This is the **authoritative** reference for everything cross-cutting in the LIMS. Module specs ([docs/modules/](modules/)) reference this document and must not duplicate or contradict it. When a rule changes, change it **here first**.
+>
+> **Implementation note:** all six modules are under active development against a running Next.js + PostgreSQL build; sections below marked with implementation specifics reflect the current code. An application super-admin role (`ADMIN`, §5) exists outside the SSOT role matrix for platform administration.
 
 ---
 
@@ -24,11 +26,11 @@ BECS Analytics operates testing/QC laboratories that need to replace manual, pap
 | # | Module | One-line scope |
 |---|---|---|
 | 1 | Personnel | HR profile, functions, competence, authorization, attendance, leave, undertakings |
-| 2 | Inventory & Procurement | Stores & sub-stores, procurement workflow, vendors, utilities |
-| 3 | Samples & Client | Client/sample registration, blinding, parameters & prices, quotations, invoices, complaints |
+| 2 | Inventory & Procurement | Main store + sub-stores (Lahore, RYK), per-item reorder thresholds & automatic stock status, issue requests, procurement workflow, vendors |
+| 3 | Samples & Client | Client/sample registration, blinding, third-party reporting, parameters & prices, quotations, invoices, outsourced parameters |
 | 4 | Testing & Reporting | Test methods, raw-data capture, verification, approval, final reports |
-| 5 | Equipment & Traceability | Calibration, equipment repair/qualification, chemicals, glassware, lab supplies |
-| 6 | Finance & Payroll | Revenue, expenses, payments, payroll |
+| 5 | Equipment & Traceability | Calibration, equipment repair/gate-pass/qualification, chemicals, glassware, lab supplies |
+| 6 | Finance & Payroll | Double-entry GL, client receivables & payments, vendor + external-lab payables, utilities/expenses, payroll (FBR salary tax) |
 
 **Deferred (extensibility hooks only — see §16):** staff Training, QMS/CAPA (Non-Compliance, Corrective Action), Quality Control (control charts, intermediate checks, interlab comparisons), Environment & Facilities, Risk Assessment, Internal Audit.
 
@@ -48,6 +50,9 @@ BECS Analytics operates testing/QC laboratories that need to replace manual, pap
 | **GRN** | Goods Receiving Note — issued by the Store In-charge after accepted inspection |
 | **PR / PO** | Purchase Request / Purchase Order |
 | **Comparative Statement** | Side-by-side comparison of vendor quotations used to select a quote |
+| **Issue request** | A request to move stock from the Main Store to a sub-store; **approved by the Store In-charge** (approval moves the on-hand balance) |
+| **Reorder threshold** | The per-item on-hand level at or below which an item's status becomes **Reorder** (or **Out** at zero); drives the reorder / PR prompts |
+| **Outsource Lab** | An external subcontractor laboratory that runs parameters the lab outsources; what we owe it is tracked as **external-lab bills** (payables), and it enters results via an outsource portal |
 | **CoA** | Certificate of Analysis (for chemicals/reference materials) |
 | **MSDS** | Material Safety Data Sheet |
 | **CRM** | Certified Reference Material — a reference standard with a certified value, lot, and expiry. Procured via Inventory & Procurement (full path) and tracked with its reference certificate in Equipment & Traceability; also the QC reference material used by the deferred Quality Control module |
@@ -103,6 +108,10 @@ This table is the **source of truth for who initiates vs. who approves**. Module
 | Client payment (incoming) | **Accountant or Liaison Officer** | — | — | Payment recorded; receivable settled |
 | Outgoing payment (vendor/utility/payroll) | Accountant | — | **COO** (every payment) | Payment disbursed |
 | Payroll run (monthly) | Accountant | — | **COO** | Payroll approved & disbursed |
+
+> **Application super-admin (`ADMIN`).** An implementation role that sits **outside** this matrix: full view/edit/delete across every module for platform administration (a generic Admin data panel, login auditing). It **bypasses the Tier-1 designation gates** in §6, but **every action is still written to the immutable audit log** (BR-5). It is not a lab/management designation and never participates in approval chains.
+>
+> **External portal logins.** `CLIENT`, `VENDOR`, and `OUTSOURCE_LAB` are Users with their own portals (own samples/reports, own POs/quotations, own outsourced results) and are excluded from staff rosters (personnel, payroll, competence).
 
 ## 6. Authorization Model
 
@@ -178,19 +187,26 @@ erDiagram
     COMPARATIVE_STATEMENT ||--|| PURCHASE_ORDER : selects
     PURCHASE_ORDER ||--o{ GOODS_RECEIVING : fulfilled_by
     GOODS_RECEIVING ||--|| GRN : produces
-    STORE ||--o{ STOCK_TRANSACTION : records
-    INVENTORY_ITEM ||--o{ STOCK_TRANSACTION : moves
+    STORE ||--o{ INVENTORY_ITEM : holds
+    STORE ||--o{ ISSUE_REQUEST : issues
+    OUTSOURCE_LAB ||--o{ SAMPLE_PARAMETER : subcontracts
 
     EQUIPMENT ||--o{ CALIBRATION_RECORD : calibrated_by
     EQUIPMENT ||--o{ QUALIFICATION : qualified_by
 
+    CLIENT ||--o{ INVOICE : billed
     INVOICE ||--o{ PAYMENT : settled_by
+    VENDOR ||--o{ VENDOR_BILL : billed_by
+    VENDOR_BILL ||--o{ VENDOR_PAYMENT : settled_by
+    OUTSOURCE_LAB ||--o{ OUTSOURCE_BILL : billed_by
+    OUTSOURCE_BILL ||--o{ OUTSOURCE_PAYMENT : settled_by
     CHART_OF_ACCOUNT ||--o{ JOURNAL_LINE : posted_to
     JOURNAL_ENTRY ||--o{ JOURNAL_LINE : contains
     INVOICE }o--|| JOURNAL_ENTRY : posts
     PAYMENT }o--|| JOURNAL_ENTRY : posts
-    PURCHASE_ORDER }o--|| JOURNAL_ENTRY : posts
-    PAYROLL_RECORD }o--|| JOURNAL_ENTRY : posts
+    VENDOR_BILL }o--|| JOURNAL_ENTRY : posts
+    OUTSOURCE_BILL }o--|| JOURNAL_ENTRY : posts
+    PAYROLL_RUN }o--|| JOURNAL_ENTRY : posts
 
     AUDIT_LOG }o--|| USER : actor
     APPROVAL }o--|| USER : approver
@@ -245,6 +261,8 @@ stateDiagram-v2
 
 **Path is per line item (BR-18):** a PR may contain **mixed-path** line items; each item is routed down the **full** path or the **simplified** path (no quotations/comparative — stationery, sanitary supplies, furniture, PPE, utilities, BR-9). Calibration and equipment-repair procurement reuse the **full path**.
 
+**Stores & reorder (BR-10):** stock is held in three stores — **Main Store** (Lahore) plus sub-stores **Lahore** and **Rahim Yar Khan**. Inventory items are grouped by register (Chemical, Standard Solution, Glassware, Equipment, Store Item, Miscellaneous, Stationery) with category-specific fields (e.g. equipment has specification + accessories, no packing; glassware's size is its specification). Each item's status — **In stock / Reorder / Out** — is derived automatically from its on-hand balance vs a per-item **reorder threshold**. A low item is replenished either by an **issue request** from the Main Store (the Store In-charge approves, which moves the balance) or, only when the Main Store is out of it, by a **purchase requisition** raised directly from the store view (single or multi-item).
+
 ## 11. Numbering & Identifier Standards
 
 All identifiers are **gap-free, unique, non-reusable, section/facility-prefixed, and generated concurrency-safely** within the creating transaction (DB sequence / advisory lock).
@@ -277,7 +295,7 @@ Rules are numbered `BR-n` and referenced by module specs.
 - **BR-7** Identifiers are **gap-free, unique, non-reusable** (§11).
 - **BR-8** A **Final Report** is an immutable, hash-sealed snapshot; amendments create a new version linked to the superseded one.
 - **BR-9** Stationery/sanitary/furniture/PPE/utilities use the **simplified procurement path** (no quotations/comparative).
-- **BR-10** New stock enters the **Lahore main store**, then moves to sub-stores only via an approved **issue request**.
+- **BR-10** New stock enters the **Main Store** (Lahore); it moves to a sub-store (**Lahore** or **Rahim Yar Khan**) only via an **issue request approved by the Store In-charge** (approval moves the on-hand balance). Each item's status (In stock / Reorder / Out) is automatic from its balance vs a per-item reorder **threshold**; a sub-store raises a **purchase requisition** for an item only when the Main Store cannot supply it.
 - **BR-11** Goods are usable only after **OM inspection (accepted)** and **GRN** issuance.
 - **BR-12** A resigned employee is tagged **non-active** and retains historical records (never hard-deleted).
 - **BR-13** Test traceability links each result to **method version, instrument calibration validity, and analyst authorization as of the test date**.
@@ -288,6 +306,9 @@ Rules are numbered `BR-n` and referenced by module specs.
 - **BR-18** A PR's procurement path is decided **per line item**; full and simplified items may coexist in one PR.
 - **BR-19** A PO may be received via **partial deliveries**, each independently inspected and GRN'd, until fully received.
 - **BR-20** Attendance is captured as **e-signed check-in/check-out** with automatic **leave/holiday integration**; leave is **applications-only** (no quota/balance tracking).
+- **BR-21** Salary income tax is computed on the **annualised taxable pay** against the **FBR salaried-person slabs (Tax Year 2026-27)**; **medical allowance is exempt up to 10% of basic** and **cash allowances are non-taxable**. Payroll is prepared by the Accountant and approved by the COO (BR-15).
+- **BR-22** Amounts owed **to** vendors and external labs (from their bills) and owed **by** clients (from invoices) are tracked per counterparty as **billed / paid / outstanding**; "paid" is the sum of recorded payments against that party's bills/invoices (payments carry no direct counterparty link, so the sum is authoritative).
+- **BR-23** The **RYK monthly consolidated invoice** (Module 06, F-5) bills **only APPROVED QC lots**, **one invoice line per lot**, priced from the **Parameter** each product is linked to (`ProductType.parameterId` → `Parameter.price`) — rates are never re-entered against the product. A lot with no linked parameter, or one whose parameter has no price, is **not billed and not lost**: it stays open and is swept onto a later invoice once priced. The invoice number is derived from (facility, year, month) — `INV-RYK-2026-06` — and `QcLot.invoiceId` marks a lot billed, so generation is **idempotent**: a month can hold only one invoice and a lot can be billed only once. The consolidating client is configured per facility (`Facility.qcBillingClientId`), not inferred from the client’s own facility. With no scheduler in the build, the invoice is raised **opportunistically after the month closes**, on the first visit to Production QC › Monthly reports or Finance › Invoices, and may also be raised on demand by a user holding `issueInvoice`.
 
 ## 13. Non-Functional Requirements
 
@@ -308,13 +329,13 @@ Rules are numbered `BR-n` and referenced by module specs.
 | Database / ORM | PostgreSQL + Prisma (extensions: `citext`, `pgcrypto`) |
 | Auth | Auth.js (Credentials, Argon2id) + custom two-tier authorization |
 | UI | Tailwind CSS + shadcn/ui |
-| Forms / validation | React Hook Form + Zod (shared client/server schemas) |
-| Tables | TanStack Table (server-side paging/filter) |
-| Charts | Recharts |
-| File storage | MinIO (S3-compatible) — CoA, MSDS, cal certs, quotations, raw-data photos, sealed reports |
-| PDF / QR | @react-pdf/renderer + a QR library |
-| Background jobs | pg-boss (Postgres-backed) |
-| Deployment | Docker Compose (Next.js standalone, Postgres, MinIO, worker) behind TLS reverse proxy |
+| Forms / mutations | **Server Actions** (native `<form>` + `useActionState`); **Zod** for server-side validation |
+| Data & tables | Server Components query Prisma directly; lists render with shadcn/ui `Table` (server-side filtering) |
+| Charts | Lightweight inline SVG / CSS (composition bars, stat tiles) |
+| File storage | **Local filesystem** (`src/lib/storage/local`) today — CoA, MSDS, cal certs, quotations, raw-data photos, sealed reports; S3-compatible object storage (MinIO, provisioned via Docker Compose) is the on-prem target (`Attachment.storageKey`) |
+| PDF / QR | **Browser print** (print-CSS pages) for documents; `qrcode` for report QR codes |
+| Background jobs | Deferred (planned: Postgres-backed queue) |
+| Deployment | Docker Compose (Postgres + MinIO provided; app runs via `npm run dev` against them) behind a TLS reverse proxy for on-prem |
 
 Full rationale: [ADR-0001](adr/0001-tech-stack.md). The Finance module is a **full double-entry general ledger** and system of record — see [ADR-0004](adr/0004-finance-accounting-model.md).
 

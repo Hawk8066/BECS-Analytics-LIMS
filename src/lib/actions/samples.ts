@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canRegisterSample } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextCounter } from "@/lib/numbering";
 
 // Short facility prefix for the sample Lab ID (Facility.code -> report prefix).
@@ -187,6 +188,17 @@ export async function registerSample(
       entityType: "Sample",
       entityId: sample.id,
       after: { labId, parameters: finalParameterIds.length, quotationId },
+      facilityId: facility.id,
+      sectionId: labSection.id,
+    });
+    await publish({
+      template: "sampleRegistered",
+      params: {
+        labId,
+        sampleId: sample.id,
+        count: finalParameterIds.length,
+      },
+      actor,
       facilityId: facility.id,
       sectionId: labSection.id,
     });

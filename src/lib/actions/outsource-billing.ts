@@ -10,6 +10,7 @@ import {
   canRecordPayment,
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { postJournal } from "@/lib/finance/posting";
 
@@ -173,6 +174,15 @@ export async function createOutsourceBill(formData: FormData): Promise<void> {
     after: { billNo, amount, taxPct, tests: selected.length, labInvoiceNo },
     facilityId: actor.facilityId,
   });
+  await publish({
+    template: "outsourceBillRecorded",
+    params: {
+      billNo,
+      billId: bill.id,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
+  });
 
   revalidatePath(`/app/outsource-labs/${outsourceLabId}`);
   revalidatePath("/app/finance/outsource-bills");
@@ -223,6 +233,16 @@ export async function recordOutsourcePayment(
     entityType: "OutsourcePayment",
     entityId: billId,
     after: { amount },
+    facilityId: bill.facilityId,
+  });
+  await publish({
+    template: "outsourcePaymentRecorded",
+    params: {
+      billNo: bill.billNo,
+      billId,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
     facilityId: bill.facilityId,
   });
 

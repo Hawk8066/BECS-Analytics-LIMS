@@ -2,7 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
+import { canIssueInvoice, canManageParameters, canViewFinance } from "@/lib/auth/perms";
 import { formatDate } from "@/lib/format";
+import { QC_FACILITY_CODE, previewMonthlyQcInvoice } from "@/lib/finance/qc-invoice";
+import { sweepMonthlyQcInvoices } from "@/lib/finance/qc-invoice-sweep";
+import { BillingCard } from "./billing-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,8 +54,20 @@ export default async function ProductionReportsPage({
   const prev = ym(new Date(year, month0 - 1, 1));
   const next = ym(new Date(year, month0 + 1, 1));
 
+  // Month-end generation, with no scheduler in the app: raise any consolidated
+  // invoice a closed month is still owed. Idempotent, self-throttled, and it
+  // swallows its own errors, so it can never break this page.
+  await sweepMonthlyQcInvoices();
+
   const [products, lots] = await Promise.all([
-    prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.productType.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: {
+        parameter: {
+          select: { id: true, name: true, matrix: true, price: true },
+        },
+      },
+    }),
     prisma.qcLot.findMany({
       where: { createdAt: { gte: start, lt: end } },
       orderBy: { createdAt: "asc" },
@@ -65,6 +81,38 @@ export default async function ProductionReportsPage({
   const total = lots.length;
   const passed = lots.filter((l) => l.verdict === "PASS").length;
   const failed = lots.filter((l) => l.verdict === "FAIL").length;
+
+  // Billing is visible to finance and to whoever maintains the rates (the RYK
+  // Lab Manager holds manageParameters, so the links can be set from here).
+  const canIssue = canIssueInvoice(user.designation);
+  const canPrice = canManageParameters(user.designation);
+  const showBilling = canIssue || canPrice || canViewFinance(user.designation);
+  const [preview, parameterOptions, qcFacility] = showBilling
+    ? await Promise.all([
+        previewMonthlyQcInvoice(year, month0),
+        canPrice
+          ? prisma.parameter.findMany({
+              where: { approvedAt: { not: null } },
+              select: { id: true, name: true, matrix: true, price: true },
+              orderBy: [{ name: "asc" }, { matrix: "asc" }],
+            })
+          : Promise.resolve([]),
+        prisma.facility.findFirst({
+          where: { code: QC_FACILITY_CODE },
+          select: { id: true },
+        }),
+      ])
+    : [null, [], null];
+
+  // Only loaded when the client still has to be chosen — it is a one-time setup
+  // step, and the full client list is 148 rows.
+  const clientOptions =
+    showBilling && canIssue && preview && !preview.billingClient
+      ? await prisma.client.findMany({
+          select: { id: true, clientNo: true, company: true },
+          orderBy: { clientNo: "asc" },
+        })
+      : [];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -109,6 +157,21 @@ export default async function ProductionReportsPage({
           </Link>
         </div>
       </div>
+
+      {showBilling && preview && qcFacility && (
+        <BillingCard
+          preview={preview}
+          month={ym(start)}
+          year={year}
+          month0={month0}
+          canIssue={canIssue}
+          canPrice={canPrice}
+          products={products}
+          parameters={parameterOptions}
+          facilityId={qcFacility.id}
+          clients={clientOptions}
+        />
+      )}
 
       {products.map((p) => {
         const rows = lots.filter((l) => l.productType.id === p.id);

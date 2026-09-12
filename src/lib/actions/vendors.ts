@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canRegisterVendor } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 
 export type FormState = {
@@ -90,6 +91,11 @@ export async function createVendor(
     entityType: "Vendor",
     entityId: vendor.id,
     after: { vendorNo, company: d.company, portalLogin: email },
+  });
+  await publish({
+    template: "vendorRegistered",
+    params: { vendorNo, vendorId: vendor.id, company: d.company },
+    actor,
   });
 
   revalidatePath("/app/vendors");
