@@ -9,6 +9,22 @@ const prisma = new PrismaClient();
 
 const DEV_PASSWORD = "Passw0rd!";
 
+/**
+ * Dev fixtures are OPT-IN, because this script is the only way to create the
+ * facilities and sections a fresh database needs — including a production one.
+ * Without an explicit flag it would put nine accounts sharing the password above
+ * onto whatever `DATABASE_URL` happens to point at.
+ *
+ * Checking `NODE_ENV` alone is not enough: the realistic accident is running this
+ * from a developer laptop (where NODE_ENV is not "production") with DATABASE_URL
+ * aimed at the cloud. So the flag is required everywhere, and production refuses
+ * outright even if the flag is set.
+ *
+ * Local development: `SEED_DEV_USERS=true` is in .env.example.
+ */
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const SEED_DEV_USERS = process.env.SEED_DEV_USERS === "true" && !IS_PRODUCTION;
+
 async function main() {
   // --- Facilities ---
   const lahore = await prisma.facility.upsert({
@@ -61,23 +77,37 @@ async function main() {
     { email: "store@becs.test", designation: "STORE_INCHARGE", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Store In-charge" },
   ];
 
-  for (const u of users) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: {},
-      create: {
-        email: u.email,
-        passwordHash,
-        status: "ACTIVE",
-        designation: u.designation,
-        facilityId: u.facilityId,
-        sectionId: sectionIds[u.sectionId]!,
-        profile: { create: { fullName: u.fullName } },
-      },
-    });
+  if (SEED_DEV_USERS) {
+    for (const u of users) {
+      await prisma.user.upsert({
+        where: { email: u.email },
+        update: {},
+        create: {
+          email: u.email,
+          passwordHash,
+          status: "ACTIVE",
+          designation: u.designation,
+          facilityId: u.facilityId,
+          sectionId: sectionIds[u.sectionId]!,
+          profile: { create: { fullName: u.fullName } },
+        },
+      });
+    }
+  } else {
+    console.log(
+      `Skipped ${users.length} dev users (set SEED_DEV_USERS=true to create them; never in production).`,
+    );
   }
 
   // --- Application super-admin (full view/edit/delete; all actions audited) ---
+  // The fallback password is only acceptable alongside the dev fixtures. Anywhere
+  // else, refuse rather than create a known-password super-admin.
+  if (!SEED_DEV_USERS && !process.env.ADMIN_PASSWORD) {
+    throw new Error(
+      "ADMIN_PASSWORD is required when seeding without dev fixtures. " +
+        "Re-run with ADMIN_PASSWORD set, or use `npm run db:admin`.",
+    );
+  }
   const adminPasswordHash = await hash(
     process.env.ADMIN_PASSWORD ?? "Admin@12345",
   );
@@ -418,10 +448,14 @@ async function main() {
     create: { key: "CLIENT", prefix: "CLI", counter: 2 },
   });
 
-  console.log("Seeded facilities, sections, users, functions, parameters, methods, clients.");
-  console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
+  console.log("Seeded facilities, sections, functions, parameters, methods, clients.");
+  if (SEED_DEV_USERS) {
+    console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
+  }
+  // Never echo the admin password: this output lands in CI logs and terminal
+  // scrollback. The operator supplied it, so they already have it.
   console.log(
-    `Admin login: ${process.env.ADMIN_EMAIL ?? "admin@becs.test"} / ${process.env.ADMIN_PASSWORD ?? "Admin@12345"} (designation ADMIN)`,
+    `Admin login: ${process.env.ADMIN_EMAIL ?? "admin@becs.test"} (designation ADMIN)`,
   );
 }
 

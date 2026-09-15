@@ -7,6 +7,14 @@ import { hash } from "argon2";
 const prisma = new PrismaClient();
 
 const EMAIL = process.env.ADMIN_EMAIL ?? "admin@becs.test";
+// The default is a development convenience. In production it would create a
+// super-admin whose password is published in this repository, so refuse instead.
+if (process.env.NODE_ENV === "production" && !process.env.ADMIN_PASSWORD) {
+  throw new Error(
+    "ADMIN_PASSWORD must be set when NODE_ENV=production — refusing to create a " +
+      "super-admin with the default password.",
+  );
+}
 const PASSWORD = process.env.ADMIN_PASSWORD ?? "Admin@12345";
 
 async function main() {
@@ -44,7 +52,9 @@ async function main() {
     },
   });
 
-  console.log(`✔ Admin ready: ${user.email} / ${PASSWORD}  (designation=ADMIN, status=ACTIVE)`);
+  // The password is deliberately not echoed — this output reaches CI logs and
+  // terminal scrollback, and whoever ran the command already supplied it.
+  console.log(`✔ Admin ready: ${user.email}  (designation=ADMIN, status=ACTIVE)`);
 }
 
 main()

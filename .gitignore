@@ -15,6 +15,9 @@ dist/
 .env
 .env.*
 !.env.example
+# Credential reference for the seeded dev logins. The passwords are already in
+# prisma/seed.ts, but a doc that collects them is a far easier thing to find.
+docs/dev-logins.md
 
 # Database / storage (local dev)
 *.sqlite
