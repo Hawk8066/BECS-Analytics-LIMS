@@ -41,9 +41,16 @@ export async function ensureCapabilitiesLoaded(): Promise<void> {
   if (!inflight) inflight = load().finally(() => (inflight = null));
   try {
     await inflight;
-  } catch {
-    // A DB hiccup must not lock everyone out: fall back to the defaults.
-    cache = new Map();
+  } catch (e) {
+    // A DB hiccup must not lock everyone out. `cache` is deliberately left null
+    // rather than set to an empty Map: an empty Map is truthy, so the `if (cache)`
+    // guard above would short-circuit for the life of the process and pin everyone
+    // to the built-in defaults until someone restarted the app — including after
+    // the underlying problem was fixed. Leaving it null costs one failed query per
+    // request while the DB is unhappy, and self-heals the moment it recovers.
+    // `hasCapability` reads `cache?.get(...)`, so a null cache already degrades to
+    // the built-in defaults rather than to "deny all".
+    console.error("[capabilities] matrix load failed; using built-in defaults", e);
   }
 }
 

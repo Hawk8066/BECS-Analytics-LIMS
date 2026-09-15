@@ -9,7 +9,7 @@ import {
   canRegisterOutsourceLab,
 } from "@/lib/auth/perms";
 import { readableFacilities } from "@/lib/facilities";
-import { getFeedSnapshot } from "@/lib/feed/query";
+import { getFeedSnapshot, EMPTY_SNAPSHOT } from "@/lib/feed/query";
 import { FeedProvider } from "@/components/feed/feed-provider";
 import { NotificationBell } from "@/components/feed/notification-bell";
 import { NewsReel } from "@/components/feed/news-reel";
@@ -42,9 +42,7 @@ export default async function AppLayout({
   // Server-rendering the first snapshot avoids an empty-bell flash; the client
   // then polls /api/feed for deltas.
   const showFeed = active && !undertakingDue;
-  const feed = showFeed
-    ? await getFeedSnapshot(user)
-    : { unread: 0, inbox: [], tasks: [], reel: [], watermark: "" };
+  const feed = showFeed ? await getFeedSnapshot(user) : EMPTY_SNAPSHOT;
   // The per-lab registers get one nav entry per lab this user may read.
   const labs = active && !undertakingDue ? await readableFacilities(user) : [];
   // Each nav section carries its own tone so the sidebar can be scanned by

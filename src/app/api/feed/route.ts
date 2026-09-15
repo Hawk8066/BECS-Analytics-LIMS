@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/current-user";
-import { getFeedSnapshot } from "@/lib/feed/query";
+import { getFeedSnapshot, EMPTY_SNAPSHOT } from "@/lib/feed/query";
 import { pruneFeed } from "@/lib/feed/prune";
 
 export const runtime = "nodejs";
@@ -20,8 +20,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return new Response(null, { status: 401 });
-  if (user.status !== "ACTIVE") return Response.json(EMPTY);
+  if (user.status !== "ACTIVE") return Response.json(EMPTY_SNAPSHOT);
 
+  // getFeedSnapshot never throws — it degrades to an empty feed — so this handler
+  // needs no guard of its own.
   const snapshot = await getFeedSnapshot(user);
   const etag = `W/"${Buffer.from(snapshot.watermark).toString("base64url")}"`;
 
@@ -35,5 +37,3 @@ export async function GET(req: NextRequest) {
     headers: { ETag: etag, "Cache-Control": "no-store" },
   });
 }
-
-const EMPTY = { unread: 0, inbox: [], tasks: [], reel: [], watermark: "" };
