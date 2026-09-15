@@ -7,7 +7,9 @@ import { requireUser } from "@/lib/auth/current-user";
 import {
   canApproveSample,
   canCoordinateTesting,
+  ANALYST_DESIGNATIONS,
 } from "@/lib/auth/perms";
+import { publish } from "@/lib/feed/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { nextNumber } from "@/lib/numbering";
 import { judgeConformity } from "@/lib/conformity";
@@ -49,7 +51,11 @@ export async function assignParameters(
   // Valid targets: active ANALYSTs at the sample's lab, and any outsource lab.
   const [roster, labs] = await Promise.all([
     prisma.user.findMany({
-      where: { designation: "ANALYST", status: "ACTIVE", facilityId: sample.facilityId },
+      where: {
+        designation: { in: [...ANALYST_DESIGNATIONS] },
+        status: "ACTIVE",
+        facilityId: sample.facilityId,
+      },
       select: { id: true },
     }),
     prisma.outsourceLab.findMany({ select: { id: true } }),
@@ -58,6 +64,9 @@ export async function assignParameters(
   const labIds = new Set(labs.map((l) => l.id));
 
   const updates = [];
+  // `updates` only holds promises, so collect the analysts who newly picked up
+  // work here — they are the people who get a personal notification below.
+  const newlyAssigned = new Set<string>();
   for (const p of sample.parameters) {
     // Locked once a result is produced, or once the outsourced test is billed.
     if (p.resultValue || p.outsourceBillId) continue;
@@ -77,6 +86,7 @@ export async function assignParameters(
     // Skip if unchanged.
     if (assignedToId === p.assignedToId && outsourceLabId === p.outsourceLabId)
       continue;
+    if (assignedToId) newlyAssigned.add(assignedToId);
     // Always write both columns so switching analyst↔lab clears the other side.
     updates.push(
       prisma.sampleParameter.update({
@@ -112,6 +122,16 @@ export async function assignParameters(
     facilityId: sample.facilityId,
     sectionId: sample.sectionId,
   });
+  if (updates.length > 0) {
+    await publish({
+      template: "sampleAssigned",
+      params: { labId: sample.labId, sampleId, count: updates.length },
+      actor,
+      facilityId: sample.facilityId,
+      sectionId: sample.sectionId,
+      to: [...newlyAssigned],
+    });
+  }
   revalidatePath(`/app/samples/${sampleId}`);
   return {};
 }
@@ -121,7 +141,13 @@ export async function assignParameters(
 // RESULTS_ENTERED on its own once the last outstanding result is saved. Shared
 // by internal (enterResult) and external (enterOutsourcedResult) entry.
 async function maybeAdvanceToResultsEntered(
-  sample: { id: string; status: string; facilityId: string; sectionId: string },
+  sample: {
+    id: string;
+    labId: string;
+    status: string;
+    facilityId: string;
+    sectionId: string;
+  },
   actorId: string,
 ): Promise<void> {
   if (sample.status !== "ASSIGNED") return;
@@ -141,6 +167,17 @@ async function maybeAdvanceToResultsEntered(
     after: { status: "RESULTS_ENTERED", via: "auto-advance" },
     facilityId: sample.facilityId,
     sectionId: sample.sectionId,
+  });
+  // Nobody "owns" this transition (it fires when the last result lands), so the
+  // actor is the analyst who completed it — enough to stamp and scope the event.
+  await publish({
+    template: "sampleResultsEntered",
+    params: { labId: sample.labId, sampleId: sample.id },
+    actor: {
+      id: actorId,
+      facilityId: sample.facilityId,
+      sectionId: sample.sectionId,
+    },
   });
 }
 
@@ -308,6 +345,13 @@ export async function verifySample(formData: FormData): Promise<void> {
     facilityId: sample.facilityId,
     sectionId: sample.sectionId,
   });
+  await publish({
+    template: "sampleVerified",
+    params: { labId: sample.labId, sampleId },
+    actor,
+    facilityId: sample.facilityId,
+    sectionId: sample.sectionId,
+  });
   revalidatePath(`/app/samples/${sampleId}`);
 }
 
@@ -407,6 +451,13 @@ export async function approveSample(formData: FormData): Promise<void> {
     action: "DECODE",
     entityType: "FinalReport",
     entityId: reportNo,
+    facilityId: sample.facilityId,
+    sectionId: sample.sectionId,
+  });
+  await publish({
+    template: "sampleApproved",
+    params: { labId: sample.labId, sampleId, reportNo },
+    actor,
     facilityId: sample.facilityId,
     sectionId: sample.sectionId,
   });

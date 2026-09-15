@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canEvaluateCompetence, canGrantAuthorization } from "@/lib/auth/perms";
+import { publish } from "@/lib/feed/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
 
 export type FormState = { error?: string };
@@ -201,6 +202,26 @@ export async function grantAuthorization(formData: FormData): Promise<void> {
     entityId: subjectId,
     after: { functionId, status: "ACTIVE", scope },
   });
+  const [subject, fn] = await Promise.all([
+    prisma.personnelProfile.findUnique({
+      where: { userId: subjectId },
+      select: { fullName: true },
+    }),
+    prisma.function.findUnique({
+      where: { id: functionId },
+      select: { name: true },
+    }),
+  ]);
+  await publish({
+    template: "authorizationGranted",
+    params: {
+      who: subject?.fullName ?? "An employee",
+      fn: fn?.name ?? "a function",
+      userId: subjectId,
+    },
+    actor,
+    to: [subjectId], // the subject may now perform it
+  });
 
   revalidatePath(`/app/personnel/${subjectId}`);
 }
@@ -224,6 +245,26 @@ export async function revokeAuthorization(formData: FormData): Promise<void> {
     entityType: "Authorization",
     entityId: id,
     after: { status: "REVOKED" },
+  });
+  const [subject, auth] = await Promise.all([
+    prisma.personnelProfile.findUnique({
+      where: { userId: subjectId },
+      select: { fullName: true },
+    }),
+    prisma.authorization.findUnique({
+      where: { id },
+      select: { function: { select: { name: true } } },
+    }),
+  ]);
+  await publish({
+    template: "authorizationRevoked",
+    params: {
+      who: subject?.fullName ?? "An employee",
+      fn: auth?.function.name ?? "a function",
+      userId: subjectId,
+    },
+    actor,
+    to: [subjectId], // high-signal: they can no longer perform it
   });
 
   revalidatePath(`/app/personnel/${subjectId}`);

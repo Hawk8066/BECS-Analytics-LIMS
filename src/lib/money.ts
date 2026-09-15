@@ -14,6 +14,7 @@ import { CoerceError } from "@/lib/admin/values";
 
 /** Prisma model -> fields holding PKR paisa. Kept in step with schema.prisma. */
 export const PAISA_FIELDS: Record<string, readonly string[]> = {
+  Expense: ["amount"],
   Invoice: ["amount"],
   JournalLine: ["debit", "credit"],
   OutsourceBill: ["subtotal", "amount"],
@@ -24,15 +25,17 @@ export const PAISA_FIELDS: Record<string, readonly string[]> = {
   Parameter: ["price", "urgentPrice"],
   ParameterSectorPrice: ["price", "urgentPrice"],
   Payment: ["amount"],
-  PayrollItem: ["gross", "incomeTax", "providentFund", "eobi", "advances", "netPay"],
+  PayrollItem: ["gross", "cashAllowance", "incomeTax", "providentFund", "eobi", "advances", "netPay"],
   PurchaseOrder: ["amount"],
   PurchaseOrderLine: ["rate"],
   Quotation: ["amount"],
   QuotationLine: ["rate"],
   // providentFundPct is a whole-number percent, not money.
-  SalaryStructure: ["basic", "houseRent", "conveyance", "medical", "otherAllowances", "eobi"],
+  SalaryStructure: ["basic", "houseRent", "conveyance", "medical", "otherAllowances", "cashAllowance", "eobi"],
   TestQuotation: ["subtotal"],
   TestQuotationItem: ["price"],
+  VendorBill: ["subtotal", "amount"],
+  VendorPayment: ["amount"],
 };
 
 const NO_FIELDS: ReadonlySet<string> = new Set();

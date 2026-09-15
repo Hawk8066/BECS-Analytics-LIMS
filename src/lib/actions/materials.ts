@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { canManageMaterials } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { saveFile } from "@/lib/storage";
+import { facilityBySlug } from "@/lib/facilities";
 
 export type FormState = { error?: string };
 
@@ -21,6 +22,8 @@ const MaterialSchema = z.object({
   certifiedValue: z.string().optional(),
   expiry: z.string().optional(),
   unit: z.string().optional(),
+  // Which lab's register this belongs to (the page it was filed from).
+  facility: z.string().optional(),
 });
 
 export async function registerMaterial(
@@ -36,6 +39,27 @@ export async function registerMaterial(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const d = parsed.data;
 
+  // Materials are registered per lab, so the record follows the page it was
+  // filed from; staff without cross-lab read stay pinned to their own.
+  let facilityId = actor.facilityId;
+  let sectionId = actor.sectionId;
+  const route = d.facility ? facilityBySlug(d.facility) : undefined;
+  if (route) {
+    const facility = await prisma.facility.findUnique({
+      where: { code: route.code },
+      select: { id: true },
+    });
+    if (!facility) return { error: "That lab no longer exists." };
+    if (!actor.canReadCrossSection && facility.id !== actor.facilityId)
+      return { error: "You can only register materials in your own lab." };
+    const section = await prisma.section.findUnique({
+      where: { type: route.section },
+      select: { id: true },
+    });
+    facilityId = facility.id;
+    sectionId = section?.id ?? actor.sectionId;
+  }
+
   const item = await prisma.materialItem.create({
     data: {
       type: d.type as MaterialType,
@@ -44,8 +68,8 @@ export async function registerMaterial(
       certifiedValue: d.certifiedValue || null,
       expiry: d.expiry ? new Date(d.expiry) : null,
       unit: d.unit || null,
-      facilityId: actor.facilityId,
-      sectionId: actor.sectionId,
+      facilityId,
+      sectionId,
       createdById: actor.id,
     },
   });
@@ -55,11 +79,11 @@ export async function registerMaterial(
     entityType: "MaterialItem",
     entityId: item.id,
     after: { type: d.type, name: d.name },
-    facilityId: actor.facilityId,
-    sectionId: actor.sectionId,
+    facilityId,
+    sectionId,
   });
 
-  revalidatePath("/app/materials");
+  if (route) revalidatePath(`/app/materials/${route.slug}`);
   redirect(`/app/materials/${item.id}`);
 }
 

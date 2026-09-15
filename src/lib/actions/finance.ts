@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canIssueInvoice, canRecordPayment } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
 import { postJournal } from "@/lib/finance/posting";
 
@@ -77,6 +78,16 @@ export async function issueInvoice(
     entityId: invoice.id,
     after: { invoiceNo, amount },
     facilityId: actor.facilityId,
+  });
+  // Before any redirect() below — redirect throws, so nothing after it runs.
+  await publish({
+    template: "invoiceIssued",
+    params: {
+      invoiceNo,
+      invoiceId: invoice.id,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
   });
 
   revalidatePath("/app/finance/invoices");
@@ -176,6 +187,15 @@ export async function issueInvoiceForQuotation(formData: FormData): Promise<void
     after: { invoiceNo, amount, taxPct, quotationId: quote.id },
     facilityId: actor.facilityId,
   });
+  await publish({
+    template: "invoiceIssued",
+    params: {
+      invoiceNo,
+      invoiceId: invoice.id,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
+  });
 
   revalidatePath("/app/invoices");
   revalidatePath("/app/finance/invoices");
@@ -233,6 +253,16 @@ export async function recordPayment(
     entityType: "Payment",
     entityId: invoiceId,
     after: { amount },
+    facilityId: invoice.facilityId,
+  });
+  await publish({
+    template: "paymentReceived",
+    params: {
+      invoiceNo: invoice.invoiceNo,
+      invoiceId,
+      amount: (amount / 100).toLocaleString("en-PK"),
+    },
+    actor,
     facilityId: invoice.facilityId,
   });
 

@@ -1,59 +1,115 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { StockStatus } from "@prisma/client";
+import { InventoryCategory } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
+import { canManageStore } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { isAdmin } from "@/lib/auth/perms";
-import { isLabOnly } from "@/lib/inventory";
 
-const VALID: StockStatus[] = ["OK", "LOW", "END"];
+const VALID_CATEGORIES = Object.values(InventoryCategory) as string[];
 
-// Any active user (any lab) may report an item's stock level. Management users
-// are limited to the non-lab registers (Lab Supplies & PPEs, Stationery, Store
-// Items).
-export async function setStockStatus(formData: FormData): Promise<void> {
+// Add a stock item to a store (the main store). Store In-charge only.
+export async function addInventoryItem(formData: FormData): Promise<void> {
   const actor = await requireUser();
+  if (!canManageStore(actor.designation))
+    throw new Error("Only the Store In-charge can add stock.");
 
-  const itemId = String(formData.get("itemId"));
-  const status = String(formData.get("status")) as StockStatus;
-  if (!VALID.includes(status)) throw new Error("Invalid stock status.");
+  const storeId = String(formData.get("storeId"));
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) throw new Error("Store not found.");
 
-  const item = await prisma.inventoryItem.findUnique({
-    where: { id: itemId },
-    select: { id: true, category: true, name: true, facilityId: true },
-  });
-  if (!item) throw new Error("Item not found.");
+  const category = String(formData.get("category") || "");
+  if (!VALID_CATEGORIES.includes(category)) throw new Error("Select a category.");
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Name is required.");
 
-  // ADMIN bypasses every Tier-1 gate (perms.ts); everyone else in a MANAGEMENT
-  // section is blocked from the lab registers.
-  if (isLabOnly(item.category) && !isAdmin(actor.designation)) {
-    const section = await prisma.section.findUnique({
-      where: { id: actor.sectionId },
-      select: { type: true },
-    });
-    if (section?.type === "MANAGEMENT")
-      throw new Error("Management users cannot update lab stock.");
-  }
+  const quantityRaw = String(formData.get("quantity") || "").trim();
+  const thresholdRaw = String(formData.get("reorderLevel") || "").trim();
+  const expiryRaw = String(formData.get("expiryDate") || "").trim();
+  const accessories = formData
+    .getAll("accessory")
+    .map(String)
+    .map((a) => a.trim())
+    .filter(Boolean);
 
-  await prisma.inventoryItem.update({
-    where: { id: itemId },
+  const item = await prisma.inventoryItem.create({
     data: {
-      stockStatus: status,
-      stockMarkedById: actor.id,
-      stockMarkedAt: new Date(),
+      storeId,
+      facilityId: store.facilityId,
+      category: category as InventoryCategory,
+      name,
+      pack: String(formData.get("pack") || "").trim() || null,
+      unit: String(formData.get("unit") || "").trim() || null,
+      specification: String(formData.get("specification") || "").trim() || null,
+      accessories,
+      quantity:
+        quantityRaw === "" ? null : Math.max(0, parseInt(quantityRaw, 10) || 0),
+      reorderLevel:
+        thresholdRaw === ""
+          ? null
+          : Math.max(0, parseInt(thresholdRaw, 10) || 0),
+      make: String(formData.get("make") || "").trim() || null,
+      expiryDate: expiryRaw ? new Date(expiryRaw) : null,
     },
   });
 
   await writeAudit({
     actorId: actor.id,
-    action: "UPDATE",
+    action: "CREATE",
     entityType: "InventoryItem",
-    entityId: itemId,
-    after: { name: item.name, stockStatus: status },
-    facilityId: item.facilityId,
+    entityId: item.id,
+    after: { name, category, storeId },
+    facilityId: store.facilityId,
+  });
+  revalidatePath(`/app/inventory/${storeId}`);
+}
+
+// Bulk-set reorder thresholds for a store's items (Thresholds tab). Reads one
+// `t_<itemId>` field per item; blank clears the threshold (→ global default).
+// Store In-charge only. Updates only the items whose value actually changed.
+export async function setThresholds(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canManageStore(actor.designation))
+    throw new Error("Only the Store In-charge can set thresholds.");
+
+  const storeId = String(formData.get("storeId"));
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) throw new Error("Store not found.");
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { storeId },
+    select: { id: true, reorderLevel: true },
   });
 
-  revalidatePath("/app/inventory");
+  const updates = [];
+  for (const it of items) {
+    const raw = formData.get(`t_${it.id}`);
+    if (raw === null) continue; // field not submitted for this item
+    const trimmed = String(raw).trim();
+    const next =
+      trimmed === "" ? null : Math.max(0, parseInt(trimmed, 10) || 0);
+    if (next !== it.reorderLevel) {
+      updates.push(
+        prisma.inventoryItem.update({
+          where: { id: it.id },
+          data: { reorderLevel: next },
+        }),
+      );
+    }
+  }
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates);
+    await writeAudit({
+      actorId: actor.id,
+      action: "UPDATE",
+      entityType: "InventoryItem",
+      entityId: storeId,
+      after: { thresholdsUpdated: updates.length, storeId },
+      facilityId: store.facilityId,
+    });
+  }
+
+  revalidatePath(`/app/inventory/${storeId}`);
 }

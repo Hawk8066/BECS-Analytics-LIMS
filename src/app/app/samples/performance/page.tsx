@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canCoordinateTesting } from "@/lib/auth/perms";
+import { ANALYST_DESIGNATIONS, canCoordinateTesting } from "@/lib/auth/perms";
 import { sampleListWhere } from "@/lib/samples/access";
 import { formatDate } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
@@ -73,7 +73,11 @@ export default async function SamplePerformancePage() {
     }),
     // Every analyst in scope, so an idle one still shows (with a zero load).
     prisma.user.findMany({
-      where: { designation: "ANALYST", status: "ACTIVE", ...facilityScope },
+      where: {
+        designation: { in: [...ANALYST_DESIGNATIONS] },
+        status: "ACTIVE",
+        ...facilityScope,
+      },
       select: { id: true, email: true, profile: { select: { fullName: true } } },
     }),
     // Samples currently on someone's bench, oldest first (most at risk).

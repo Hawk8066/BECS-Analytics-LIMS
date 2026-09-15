@@ -95,6 +95,7 @@ export default async function PayrollRunPage({
               <TableRow>
                 <TableHead>Employee</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">Cash (n/t)</TableHead>
                 <TableHead className="text-right">Income tax</TableHead>
                 <TableHead className="text-right">PF</TableHead>
                 <TableHead className="text-right">EOBI</TableHead>
@@ -106,6 +107,9 @@ export default async function PayrollRunPage({
                 <TableRow key={i.id}>
                   <TableCell>{name.get(i.userId) ?? "—"}</TableCell>
                   <TableCell className="text-right">{pkr(i.gross)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {i.cashAllowance ? pkr(i.cashAllowance) : "—"}
+                  </TableCell>
                   <TableCell className="text-right">{pkr(i.incomeTax)}</TableCell>
                   <TableCell className="text-right">{pkr(i.providentFund)}</TableCell>
                   <TableCell className="text-right">{pkr(i.eobi)}</TableCell>

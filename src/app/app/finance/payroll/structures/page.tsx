@@ -23,6 +23,7 @@ const FIELDS: { name: string; label: string }[] = [
   { name: "conveyance", label: "Conveyance" },
   { name: "medical", label: "Medical" },
   { name: "otherAllowances", label: "Other" },
+  { name: "cashAllowance", label: "Cash allow. (n/t)" },
   { name: "eobi", label: "EOBI" },
 ];
 
@@ -49,7 +50,12 @@ export default async function SalaryStructuresPage() {
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Salary structures</h1>
-        <p className="text-sm text-muted-foreground">Amounts in PKR.</p>
+        <p className="text-sm text-muted-foreground">
+          Monthly amounts in PKR. Income tax is computed on the annualised
+          taxable pay (FBR salaried slabs, Tax Year 2026-27). Medical is exempt
+          up to 10% of basic; the cash allowance (n/t) is paid in cash and is
+          not taxable.
+        </p>
       </div>
 
       <ImportExcel

@@ -7,6 +7,7 @@ import {
   canManageProductionQc,
   canApproveLot,
   canSubmitResult,
+  ANALYST_DESIGNATIONS,
 } from "@/lib/auth/perms";
 import { decideLot, setProductSpec, reassignLot } from "@/lib/actions/production-qc";
 import { formatDate } from "@/lib/format";
@@ -287,7 +288,7 @@ export default async function ProductionPage() {
     }),
     prisma.user.findMany({
       where: {
-        designation: "ANALYST",
+        designation: { in: [...ANALYST_DESIGNATIONS] },
         status: "ACTIVE",
         facility: { code: "RYK" },
       },

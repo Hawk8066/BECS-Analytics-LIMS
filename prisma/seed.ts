@@ -1,12 +1,29 @@
 import { PrismaClient, type Designation, type SectionType } from "@prisma/client";
 import { hash } from "argon2";
 import { createHash } from "crypto";
+import { ACCOUNTS } from "../src/lib/finance/accounts";
 
 // Seeds facilities, sections, dev users, and a few functions (SSOT §4, §6).
 // Run with: npx prisma db seed  (requires a running database).
 const prisma = new PrismaClient();
 
 const DEV_PASSWORD = "Passw0rd!";
+
+/**
+ * Dev fixtures are OPT-IN, because this script is the only way to create the
+ * facilities and sections a fresh database needs — including a production one.
+ * Without an explicit flag it would put nine accounts sharing the password above
+ * onto whatever `DATABASE_URL` happens to point at.
+ *
+ * Checking `NODE_ENV` alone is not enough: the realistic accident is running this
+ * from a developer laptop (where NODE_ENV is not "production") with DATABASE_URL
+ * aimed at the cloud. So the flag is required everywhere, and production refuses
+ * outright even if the flag is set.
+ *
+ * Local development: `SEED_DEV_USERS=true` is in .env.example.
+ */
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const SEED_DEV_USERS = process.env.SEED_DEV_USERS === "true" && !IS_PRODUCTION;
 
 async function main() {
   // --- Facilities ---
@@ -53,29 +70,44 @@ async function main() {
     { email: "om@becs.test", designation: "OPERATIONS_MANAGER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Operations Manager" },
     { email: "labmanager.ryk@becs.test", designation: "LAB_MANAGER_RYK", facilityId: ryk.id, sectionId: "RYK_LAB", fullName: "Lab Manager (RYK)" },
     { email: "analyst@becs.test", designation: "ANALYST", facilityId: lahore.id, sectionId: "LAHORE_LAB", fullName: "Lahore Analyst" },
+    { email: "analyst.ryk@becs.test", designation: "ANALYST_RYK", facilityId: ryk.id, sectionId: "RYK_LAB", fullName: "RYK Analyst" },
     { email: "liaison@becs.test", designation: "LIAISON_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Liaison Officer" },
     { email: "purchaser@becs.test", designation: "PURCHASE_OFFICER", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Purchase Officer" },
     { email: "accountant@becs.test", designation: "ACCOUNTANT", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Accountant" },
     { email: "store@becs.test", designation: "STORE_INCHARGE", facilityId: lahore.id, sectionId: "MANAGEMENT", fullName: "Store In-charge" },
   ];
 
-  for (const u of users) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: {},
-      create: {
-        email: u.email,
-        passwordHash,
-        status: "ACTIVE",
-        designation: u.designation,
-        facilityId: u.facilityId,
-        sectionId: sectionIds[u.sectionId]!,
-        profile: { create: { fullName: u.fullName } },
-      },
-    });
+  if (SEED_DEV_USERS) {
+    for (const u of users) {
+      await prisma.user.upsert({
+        where: { email: u.email },
+        update: {},
+        create: {
+          email: u.email,
+          passwordHash,
+          status: "ACTIVE",
+          designation: u.designation,
+          facilityId: u.facilityId,
+          sectionId: sectionIds[u.sectionId]!,
+          profile: { create: { fullName: u.fullName } },
+        },
+      });
+    }
+  } else {
+    console.log(
+      `Skipped ${users.length} dev users (set SEED_DEV_USERS=true to create them; never in production).`,
+    );
   }
 
   // --- Application super-admin (full view/edit/delete; all actions audited) ---
+  // The fallback password is only acceptable alongside the dev fixtures. Anywhere
+  // else, refuse rather than create a known-password super-admin.
+  if (!SEED_DEV_USERS && !process.env.ADMIN_PASSWORD) {
+    throw new Error(
+      "ADMIN_PASSWORD is required when seeding without dev fixtures. " +
+        "Re-run with ADMIN_PASSWORD set, or use `npm run db:admin`.",
+    );
+  }
   const adminPasswordHash = await hash(
     process.env.ADMIN_PASSWORD ?? "Admin@12345",
   );
@@ -341,19 +373,9 @@ async function main() {
   }
 
   // --- Chart of accounts (double-entry GL, ADR-0004) ---
-  const accounts: { code: string; name: string; type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE" }[] = [
-    { code: "1000", name: "Cash", type: "ASSET" },
-    { code: "1010", name: "Bank", type: "ASSET" },
-    { code: "1100", name: "Accounts Receivable", type: "ASSET" },
-    { code: "1150", name: "Input Tax Recoverable", type: "ASSET" },
-    { code: "2000", name: "Accounts Payable", type: "LIABILITY" },
-    { code: "2100", name: "Sales Tax Payable", type: "LIABILITY" },
-    { code: "3000", name: "Owner's Equity", type: "EQUITY" },
-    { code: "4000", name: "Sales Revenue", type: "REVENUE" },
-    { code: "5000", name: "Operating Expenses", type: "EXPENSE" },
-    { code: "5100", name: "Payroll Expense", type: "EXPENSE" },
-  ];
-  for (const a of accounts) {
+  // The list lives in src/lib/finance/accounts.ts so the app and the seed can't
+  // disagree about which codes exist.
+  for (const a of ACCOUNTS) {
     await prisma.chartOfAccount.upsert({
       where: { code: a.code },
       update: {},
@@ -426,10 +448,14 @@ async function main() {
     create: { key: "CLIENT", prefix: "CLI", counter: 2 },
   });
 
-  console.log("Seeded facilities, sections, users, functions, parameters, methods, clients.");
-  console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
+  console.log("Seeded facilities, sections, functions, parameters, methods, clients.");
+  if (SEED_DEV_USERS) {
+    console.log(`Dev login: coo@becs.test / ${DEV_PASSWORD} (and om@, analyst@, etc.)`);
+  }
+  // Never echo the admin password: this output lands in CI logs and terminal
+  // scrollback. The operator supplied it, so they already have it.
   console.log(
-    `Admin login: ${process.env.ADMIN_EMAIL ?? "admin@becs.test"} / ${process.env.ADMIN_PASSWORD ?? "Admin@12345"} (designation ADMIN)`,
+    `Admin login: ${process.env.ADMIN_EMAIL ?? "admin@becs.test"} (designation ADMIN)`,
   );
 }
 

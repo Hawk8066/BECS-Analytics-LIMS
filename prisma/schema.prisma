@@ -30,7 +30,7 @@ datasource db {
 
 enum FacilityCode {
   LAHORE // Parent Lab
-  RYK    // Rahimyar Khan on-site QC Sub-Lab
+  RYK // Rahimyar Khan on-site QC Sub-Lab
 }
 
 enum SectionType {
@@ -47,7 +47,8 @@ enum Designation {
   COO
   OPERATIONS_MANAGER
   LAB_MANAGER_RYK
-  ANALYST
+  ANALYST // bench analyst, Lahore
+  ANALYST_RYK // bench analyst, Rahim Yar Khan on-site QC lab
   LAB_ASSISTANT
   LAB_ATTENDANT
   LIAISON_OFFICER
@@ -60,10 +61,10 @@ enum Designation {
 
 // Lifecycle of a person/account through the split-entry onboarding (Module 01).
 enum UserStatus {
-  PENDING_PROFILE  // OM created shell; user must complete details
+  PENDING_PROFILE // OM created shell; user must complete details
   PENDING_APPROVAL // user submitted; awaiting COO approval
   ACTIVE
-  NON_ACTIVE       // resigned (BR-12: retained, never hard-deleted)
+  NON_ACTIVE // resigned (BR-12: retained, never hard-deleted)
 }
 
 enum AuthorizationStatus {
@@ -128,6 +129,7 @@ enum ItemCategory {
   CRM // Certified Reference Material (full path; tracked in Equipment & Traceability)
   EQUIPMENT
   EQUIPMENT_SUPPLY
+  EQUIPMENT_REPAIR // repair/service of a registered asset — work, never stocked
   GLASSWARE
   LAB_SUPPLY
   STATIONERY
@@ -179,6 +181,35 @@ enum EquipmentStatus {
   RETIRED
 }
 
+// Why an asset is being worked on: it failed, or it is planned service.
+enum RepairKind {
+  BREAKDOWN
+  MAINTENANCE
+}
+
+// Where the work happens. Off-site means the asset physically leaves the
+// premises, which requires a gate pass (BR-EQ-5).
+enum RepairSite {
+  ON_SITE
+  OFF_SITE
+}
+
+// Repair case-file lifecycle. IQ/OQ/PQ are Qualification rows, not statuses:
+// they gate the move from INSPECTED to IN_SERVICE (BR-EQ-6).
+enum RepairStatus {
+  REQUESTED // case opened, PR raised, procurement running
+  GATE_PASSED // off-site only: the asset has left under a gate pass
+  RECEIVED // back at the lab, or the on-site job is finished
+  INSPECTED // the work was inspected and accepted
+  IN_SERVICE // requalified and returned to service (terminal)
+  CANCELLED // abandoned (terminal)
+}
+
+enum GatePassStatus {
+  OUT
+  RETURNED
+}
+
 enum QualificationType {
   IQ
   OQ
@@ -226,9 +257,17 @@ model Facility {
   name      String
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
+  // The client this facility's production-QC output is consolidated onto — the
+  // RYK monthly invoice to Bio Tech Fertilizers (SSOT §3). Held here rather than
+  // inferred from the client's own facility, because BECS registers the company
+  // against Lahore while the QC work is performed at RYK.
+  qcBillingClientId String?
+  qcBillingClient   Client?  @relation("FacilityQcBillingClient", fields: [qcBillingClientId], references: [id])
 
   sections Section[]
   users    User[]
+
+  @@index([qcBillingClientId])
 }
 
 model Section {
@@ -266,28 +305,29 @@ model User {
   reports   User[]  @relation("UserManager")
 
   // External portal logins: link this account to a Client / Vendor / Outsource lab.
-  clientId String?
-  client   Client? @relation("ClientPortalUser", fields: [clientId], references: [id])
-  vendorId String?
-  vendor   Vendor? @relation("VendorPortalUser", fields: [vendorId], references: [id])
+  clientId       String?
+  client         Client?       @relation("ClientPortalUser", fields: [clientId], references: [id])
+  vendorId       String?
+  vendor         Vendor?       @relation("VendorPortalUser", fields: [vendorId], references: [id])
   outsourceLabId String?
   outsourceLab   OutsourceLab? @relation("OutsourceLabRep", fields: [outsourceLabId], references: [id])
 
-  profile        PersonnelProfile?
-  roles          UserRole[]
-  competences    CompetenceEvaluation[] @relation("Subject")
-  evaluated      CompetenceEvaluation[] @relation("Evaluator")
-  authorizations Authorization[]        @relation("AuthSubject")
-  grantedAuths   Authorization[]        @relation("AuthGrantedBy")
-  auditLogs      AuditLog[]
-  approvals      ApprovalStep[]
-  signatures     Signature[]
-  notifications  Notification[]
+  profile           PersonnelProfile?
+  roles             UserRole[]
+  competences       CompetenceEvaluation[]    @relation("Subject")
+  evaluated         CompetenceEvaluation[]    @relation("Evaluator")
+  authorizations    Authorization[]           @relation("AuthSubject")
+  grantedAuths      Authorization[]           @relation("AuthGrantedBy")
+  auditLogs         AuditLog[]
+  approvals         ApprovalStep[]
+  signatures        Signature[]
+  notifications     Notification[]
+  feedEvents        FeedEvent[]               @relation("FeedActor")
   attendances       Attendance[]
-  leaveApplications LeaveApplication[] @relation("LeaveApplicant")
-  leaveDecisions    LeaveApplication[] @relation("LeaveApprover")
+  leaveApplications LeaveApplication[]        @relation("LeaveApplicant")
+  leaveDecisions    LeaveApplication[]        @relation("LeaveApprover")
   undertakings      ImpartialityUndertaking[]
-  qcLotsAssigned    QcLot[]            @relation("QcLotAnalyst")
+  qcLotsAssigned    QcLot[]                   @relation("QcLotAnalyst")
   priceChanges      ParameterPriceHistory[]
   pkgPriceChanges   PackagePriceHistory[]
 
@@ -305,29 +345,29 @@ model User {
 // Full HR profile (Module 01). OM enters the shell fields on User; the user
 // completes the rest here; COO approval flips User.status to ACTIVE.
 model PersonnelProfile {
-  id                    String    @id @default(uuid())
-  userId                String    @unique
-  user                  User      @relation(fields: [userId], references: [id])
-  title                 String?
-  fullName              String
-  fatherName            String?
-  dateOfBirth           DateTime?
-  cnic                  String?   @unique
-  contactNumber         String?
-  bloodGroup            String?
-  emergencyContact      String? // emergency contact number
-  emergencyContactName  String?
+  id                       String    @id @default(uuid())
+  userId                   String    @unique
+  user                     User      @relation(fields: [userId], references: [id])
+  title                    String?
+  fullName                 String
+  fatherName               String?
+  dateOfBirth              DateTime?
+  cnic                     String?   @unique
+  contactNumber            String?
+  bloodGroup               String?
+  emergencyContact         String? // emergency contact number
+  emergencyContactName     String?
   emergencyContactRelation String?
-  education             String?
-  experience            String?
-  publications          String?
-  trainings             String?
-  skills                String?
-  dateOfJoining         DateTime?
-  completedByUserAt     DateTime?
-  approvedByCooAt       DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  education                String?
+  experience               String?
+  publications             String?
+  trainings                String?
+  skills                   String?
+  dateOfJoining            DateTime?
+  completedByUserAt        DateTime?
+  approvedByCooAt          DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   educationEntries   EducationEntry[]
   experienceEntries  ExperienceEntry[]
@@ -424,46 +464,57 @@ model UserRole {
   @@id([userId, roleId])
 }
 
+// Admin-configurable Tier-1 capability matrix (SSOT §6). A row exists ONLY for a
+// capability whose designation set the super-admin has changed from the built-in
+// default in src/lib/auth/capabilities.ts — no row means "use the default".
+// ADMIN passes every capability implicitly and is never stored here.
+model CapabilityGrant {
+  capability   String        @id // e.g. "viewFinance", "manageStore"
+  designations Designation[]
+  updatedById  String?
+  updatedAt    DateTime      @updatedAt
+}
+
 // ----------------------------------------------------------------------------
 // Authorization chain (Tier 2): Function -> Competence -> Authorization
 // SSOT §6
 // ----------------------------------------------------------------------------
 
 model Function {
-  id          String   @id @default(uuid())
-  code        String   @unique // e.g. "RUN_TM_014", "SIGN_FINAL_REPORT"
-  name        String
-  description String?
+  id                 String    @id @default(uuid())
+  code               String    @unique // e.g. "RUN_TM_014", "SIGN_FINAL_REPORT"
+  name               String
+  description        String?
   // Eligibility criteria for competence/authorization to this function.
   requiredEducation  String[] // acceptable degree levels (any-of)
   requiredFields     String[] // acceptable disciplines (any-of)
   requiredTrainings  String[] // required trainings (free text, multiple)
   minExperienceYears Float? // minimum years of experience (0.5 increments)
-  createdAt   DateTime @default(now())
-  approvedAt  DateTime? // COO approval to make the Function available
+  createdAt          DateTime  @default(now())
+  approvedAt         DateTime? // COO approval to make the Function available
 
   competences    CompetenceEvaluation[]
   authorizations Authorization[]
 }
 
 model CompetenceEvaluation {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   subjectId   String
-  subject     User     @relation("Subject", fields: [subjectId], references: [id])
+  subject     User      @relation("Subject", fields: [subjectId], references: [id])
   functionId  String
-  function    Function @relation(fields: [functionId], references: [id])
+  function    Function  @relation(fields: [functionId], references: [id])
   evaluatorId String
-  evaluator   User     @relation("Evaluator", fields: [evaluatorId], references: [id])
+  evaluator   User      @relation("Evaluator", fields: [evaluatorId], references: [id])
   // Outcome of the assessment. `competent` is the gate decision; the basis
   // (education/experience/training/skills) and remarks document how it was reached.
-  competent   Boolean  @default(true)
+  competent   Boolean   @default(true)
   education   String?
   experience  String?
   training    String?
   skills      String?
   remarks     String?
   result      String? // legacy free-text result/score (kept for older records)
-  evaluatedAt DateTime @default(now())
+  evaluatedAt DateTime  @default(now())
   validUntil  DateTime?
 
   @@index([subjectId])
@@ -471,18 +522,18 @@ model CompetenceEvaluation {
 }
 
 model Authorization {
-  id           String              @id @default(uuid())
-  subjectId    String
-  subject      User                @relation("AuthSubject", fields: [subjectId], references: [id])
-  functionId   String
-  function     Function            @relation(fields: [functionId], references: [id])
-  grantedById  String // COO
-  grantedBy    User                @relation("AuthGrantedBy", fields: [grantedById], references: [id])
-  status       AuthorizationStatus @default(ACTIVE)
-  scope        String              @default("FULL") // FULL | PARTIAL (fully/partially authorized)
-  effectiveAt  DateTime            @default(now())
-  expiresAt    DateTime?
-  createdAt    DateTime            @default(now())
+  id          String              @id @default(uuid())
+  subjectId   String
+  subject     User                @relation("AuthSubject", fields: [subjectId], references: [id])
+  functionId  String
+  function    Function            @relation(fields: [functionId], references: [id])
+  grantedById String // COO
+  grantedBy   User                @relation("AuthGrantedBy", fields: [grantedById], references: [id])
+  status      AuthorizationStatus @default(ACTIVE)
+  scope       String              @default("FULL") // FULL | PARTIAL (fully/partially authorized)
+  effectiveAt DateTime            @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime            @default(now())
 
   @@unique([subjectId, functionId])
   @@index([functionId])
@@ -532,14 +583,14 @@ model Attachment {
 
 // Generic approval routing (SSOT §10). Attaches to any approvable document.
 model Approval {
-  id         String         @id @default(uuid())
-  subjectType String        // e.g. "PurchaseRequest", "PersonnelProfile"
-  subjectId  String
-  status     ApprovalStatus @default(PENDING)
-  facilityId String?
-  sectionId  String?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id          String         @id @default(uuid())
+  subjectType String // e.g. "PurchaseRequest", "PersonnelProfile"
+  subjectId   String
+  status      ApprovalStatus @default(PENDING)
+  facilityId  String?
+  sectionId   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   steps ApprovalStep[]
 
@@ -587,18 +638,47 @@ model Sequence {
   @@index([key])
 }
 
+// A targeted, per-recipient notice (the bell's "Inbox" tab). Text is NOT stored:
+// `template` + `params` are rendered per viewer at read time through
+// src/lib/feed/render.ts, so one event yields one row per recipient yet still
+// respects that viewer's blinding (client identity) at the moment they read it.
+// Standing work ("3 PRs await you") is NOT stored here — it is derived live by
+// the task providers in src/lib/feed/tasks.ts, so it can never go stale.
 model Notification {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  kind      String // "APPROVAL_PENDING", "CALIBRATION_DUE", ...
-  title     String
-  body      String?
-  link      String?
+  user      User      @relation(fields: [userId], references: [id])
+  kind      String // coarse grouping for icon/colour
+  template  String // key into src/lib/feed/templates.ts
+  params    Json
+  actorId   String?
+  dedupeKey String? // "<template>:<subjectId>"; NULLs never collide in Postgres
   readAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  @@index([userId])
+  @@unique([userId, dedupeKey]) // with createMany({skipDuplicates}) => idempotent
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt]) // retention prune
+}
+
+// A broadcast activity item for the news reel. Audience is a CAPABILITY KEY, not
+// a designation list, because the capability matrix is admin-mutable at runtime —
+// storing the key lets the audience re-resolve live instead of going stale.
+// facilityId/sectionId are NOT NULL so a scoped read can never silently drop rows
+// (the flaw that rules out deriving the reel from AuditLog).
+model FeedEvent {
+  id          String   @id @default(uuid())
+  template    String // key into src/lib/feed/templates.ts (drives render + href)
+  params      Json
+  audienceKey String // CapabilityKey — the capability that gates READING the page
+  facilityId  String
+  sectionId   String
+  actorId     String?
+  actor       User?    @relation("FeedActor", fields: [actorId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([facilityId, sectionId, createdAt])
+  @@index([createdAt]) // retention prune
 }
 
 // ----------------------------------------------------------------------------
@@ -684,10 +764,11 @@ model Client {
   createdById   String?
   createdAt     DateTime @default(now())
 
-  samples  Sample[]
-  invoices Invoice[]
-  portalUsers User[] @relation("ClientPortalUser")
-  testQuotations TestQuotation[]
+  samples              Sample[]
+  invoices             Invoice[]
+  qcBilledFacilities   Facility[]      @relation("FacilityQcBillingClient")
+  portalUsers          User[]          @relation("ClientPortalUser")
+  testQuotations       TestQuotation[]
   referredThirdParties ThirdParty[]
 
   @@index([facilityId])
@@ -714,7 +795,7 @@ model OutsourceLab {
   createdById   String?
   createdAt     DateTime @default(now())
 
-  portalUsers      User[]            @relation("OutsourceLabRep")
+  portalUsers      User[]              @relation("OutsourceLabRep")
   sampleParameters SampleParameter[]
   labPrices        OutsourceLabPrice[]
   bills            OutsourceBill[]
@@ -725,32 +806,32 @@ model OutsourceLab {
 // Client-facing quotation for testing services (priced from sector prices &
 // packages). Items are snapshotted so the quote is immutable once created.
 model TestQuotation {
-  id          String              @id @default(uuid())
-  quoteNo     String              @unique
-  clientId    String
-  client      Client              @relation(fields: [clientId], references: [id])
-  sector      String?
+  id            String        @id @default(uuid())
+  quoteNo       String        @unique
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  sector        String?
   // What is being quoted and how many samples of it; the total is the per-sample
   // cost times the quantity.
-  sampleType  String?
-  sampleQty   Int                 @default(1)
+  sampleType    String?
+  sampleQty     Int           @default(1)
   // Which rate card the quote was priced from (SSOT: samples carry the same).
-  priority    PricePriority       @default(NORMAL)
+  priority      PricePriority @default(NORMAL)
   // Services sales tax, whole percent, added on top of the net; `total` is the
   // tax-inclusive amount.
-  taxPct      Int                 @default(0)
-  status      String              @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED
-  validUntil  DateTime?
-  subtotal    Int                 @default(0) // PKR paisa — gross, sum of items
+  taxPct        Int           @default(0)
+  status        String        @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED
+  validUntil    DateTime?
+  subtotal      Int           @default(0) // PKR paisa — gross, sum of items
   // Quote-level discount. Kind NONE | PERCENT | AMOUNT; value is a whole percent
   // for PERCENT and paisa for AMOUNT. `total` is the net payable (subtotal less
   // the discount) snapshotted at creation, so the quote stays immutable.
-  discountKind  String            @default("NONE")
-  discountValue Int               @default(0)
-  total         Int               @default(0) // PKR paisa — net payable
-  note        String?
-  createdById String?
-  createdAt   DateTime            @default(now())
+  discountKind  String        @default("NONE")
+  discountValue Int           @default(0)
+  total         Int           @default(0) // PKR paisa — net payable
+  note          String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
 
   items    TestQuotationItem[]
   samples  Sample[]
@@ -767,7 +848,7 @@ model TestQuotationItem {
   refId       String?
   name        String
   price       Int // PKR paisa — before discount
-  discount    Int  @default(0) // PKR paisa — per-line discount
+  discount    Int           @default(0) // PKR paisa — per-line discount
 
   @@index([quotationId])
 }
@@ -775,24 +856,25 @@ model TestQuotationItem {
 // Master parameter (Module 04 owns these; Samples reads them). `accredited`
 // drives the List of Accredited Parameters. Price in PKR paisa (SSOT §15).
 model Parameter {
-  id          String    @id @default(uuid())
-  name        String
-  unit        String?
-  matrix      String? // sample matrix (e.g. Soil, Water, Fertilizer)
-  method      String? // test method / reference
-  lod         String? // Limit of Detection
-  loq         String? // Limit of Quantification
-  accredited  Boolean   @default(false)
-  price       Int? // PKR paisa — normal priority
-  urgentPrice Int? // PKR paisa — urgent priority (falls back to price when unset)
+  id            String    @id @default(uuid())
+  name          String
+  unit          String?
+  matrix        String? // sample matrix (e.g. Soil, Water, Fertilizer)
+  method        String? // test method / reference
+  lod           String? // Limit of Detection
+  loq           String? // Limit of Quantification
+  accredited    Boolean   @default(false)
+  price         Int? // PKR paisa — normal priority
+  urgentPrice   Int? // PKR paisa — urgent priority (falls back to price when unset)
   // Turnaround time in working days, per priority. What the client is promised.
   tatDays       Int?
   tatUrgentDays Int?
-  createdById String? // proposer (OM / LO / Lab Manager)
-  approvedAt  DateTime? // COO approval to make the parameter available
-  createdAt   DateTime  @default(now())
+  createdById   String? // proposer (OM / LO / Lab Manager)
+  approvedAt    DateTime? // COO approval to make the parameter available
+  createdAt     DateTime  @default(now())
 
   sampleParameters   SampleParameter[]
+  qcProductTypes     ProductType[]
   sectorPrices       ParameterSectorPrice[]
   outsourceLabPrices OutsourceLabPrice[]
   priceHistory       ParameterPriceHistory[]
@@ -959,37 +1041,37 @@ model TestMethod {
 // A registered sample. `labId` is the coded identifier seen by analysts/OM
 // (blinding, SSOT §8). The clientId link is access-gated in the app layer.
 model Sample {
-  id              String       @id @default(uuid())
-  labId           String       @unique
-  clientId        String
-  client          Client       @relation(fields: [clientId], references: [id])
-  sampleType      String
-  clientSampleRef String? // client-supplied sample id (not identity-revealing)
-  quantity        String? // received amount as printed on the report, e.g. "800 g"
+  id                String         @id @default(uuid())
+  labId             String         @unique
+  clientId          String
+  client            Client         @relation(fields: [clientId], references: [id])
+  sampleType        String
+  clientSampleRef   String? // client-supplied sample id (not identity-revealing)
+  quantity          String? // received amount as printed on the report, e.g. "800 g"
   physicalCondition String? // e.g. "Solid granules", "Liquid" — shown on the report
-  priority        String?
-  instructions    String?
-  thirdPartyName  String? // legacy free-text third-party name (superseded by thirdParty)
+  priority          String?
+  instructions      String?
+  thirdPartyName    String? // legacy free-text third-party name (superseded by thirdParty)
   // Report issued in the name of a saved third party (address shown on the report).
-  thirdPartyId    String?
-  thirdParty      ThirdParty?  @relation(fields: [thirdPartyId], references: [id])
-  status          SampleStatus @default(REGISTERED)
+  thirdPartyId      String?
+  thirdParty        ThirdParty?    @relation(fields: [thirdPartyId], references: [id])
+  status            SampleStatus   @default(REGISTERED)
   // The accepted quotation this sample was booked against, when there is one:
   // walk-in samples have none, quoted work is traceable back to what was agreed.
-  quotationId     String?
-  quotation       TestQuotation? @relation(fields: [quotationId], references: [id])
+  quotationId       String?
+  quotation         TestQuotation? @relation(fields: [quotationId], references: [id])
   // Optional standard the client asked this sample to be conformed against; each
   // result's limit is snapshotted onto its SampleParameter at registration.
-  standardId      String?
-  standard        Standard?    @relation(fields: [standardId], references: [id])
-  facilityId      String
-  sectionId       String
-  registeredById  String?
+  standardId        String?
+  standard          Standard?      @relation(fields: [standardId], references: [id])
+  facilityId        String
+  sectionId         String
+  registeredById    String?
   // Deprecated: analyst assignment is now per-parameter (SampleParameter.assignedToId).
   // Kept nullable for historical rows; no longer read by the testing workflow.
-  assignedToId    String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  assignedToId      String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   parameters SampleParameter[]
   report     FinalReport?
@@ -1007,26 +1089,26 @@ model Sample {
 // identity, SSOT §8). A lightweight named entity with its own address — no portal
 // login. Selected while booking a sample; its name + address print on the report.
 model ThirdParty {
-  id            String   @id @default(uuid())
-  code          String   @unique
-  company       String
-  addressLine1  String?
-  addressLine2  String?
-  addressLine3  String?
-  city          String?
-  province      String?
-  country       String?
-  contactPerson String?
-  contactNumber String?
-  email         String?
-  ntn           String?
-  stn           String?
+  id                String   @id @default(uuid())
+  code              String   @unique
+  company           String
+  addressLine1      String?
+  addressLine2      String?
+  addressLine3      String?
+  city              String?
+  province          String?
+  country           String?
+  contactPerson     String?
+  contactNumber     String?
+  email             String?
+  ntn               String?
+  stn               String?
   // The client this third party is associated with (who asks reports in its name).
   referenceClientId String?
-  referenceClient   Client? @relation(fields: [referenceClientId], references: [id])
-  facilityId    String
-  createdById   String?
-  createdAt     DateTime @default(now())
+  referenceClient   Client?  @relation(fields: [referenceClientId], references: [id])
+  facilityId        String
+  createdById       String?
+  createdAt         DateTime @default(now())
 
   samples Sample[]
 
@@ -1037,11 +1119,11 @@ model ThirdParty {
 // A test line item on a sample (sample × parameter). Result entry + raw-data
 // photo are added in the Testing increment.
 model SampleParameter {
-  id                  String      @id @default(uuid())
+  id                  String         @id @default(uuid())
   sampleId            String
-  sample              Sample      @relation(fields: [sampleId], references: [id])
+  sample              Sample         @relation(fields: [sampleId], references: [id])
   parameterId         String
-  parameter           Parameter   @relation(fields: [parameterId], references: [id])
+  parameter           Parameter      @relation(fields: [parameterId], references: [id])
   unit                String? // unit chosen for this sample (may differ from the parameter default)
   // Analyst assigned to run this specific test — assignment is per-parameter, so
   // one sample's parameters can be split across several analysts (D-testing).
@@ -1049,13 +1131,13 @@ model SampleParameter {
   // analyst OR subcontracted to an external lab, never both.
   assignedToId        String?
   outsourceLabId      String?
-  outsourceLab        OutsourceLab? @relation(fields: [outsourceLabId], references: [id])
+  outsourceLab        OutsourceLab?  @relation(fields: [outsourceLabId], references: [id])
   // The payable bill this outsourced test was billed on. Locks the test: it
   // can't be re-billed or reassigned once set.
   outsourceBillId     String?
   outsourceBill       OutsourceBill? @relation(fields: [outsourceBillId], references: [id])
   testMethodId        String?
-  testMethod          TestMethod? @relation(fields: [testMethodId], references: [id])
+  testMethod          TestMethod?    @relation(fields: [testMethodId], references: [id])
   resultValue         String?
   calculations        String?
   // Conformity: the acceptance limit snapshotted from the sample's standard at
@@ -1066,7 +1148,7 @@ model SampleParameter {
   conformity          String?
   // Result entered on an instrument with lapsed calibration (allowed but
   // flagged, BR-17). The uploaded raw-data photo is the legal raw record.
-  outOfCalibration    Boolean     @default(false)
+  outOfCalibration    Boolean        @default(false)
   // Raw-data reference: the physical lab register + page where the result is
   // recorded (in-house analysts). Outsourced results attach a report instead.
   registerNo          String?
@@ -1074,7 +1156,7 @@ model SampleParameter {
   rawDataAttachmentId String?
   enteredById         String?
   enteredAt           DateTime?
-  createdAt           DateTime    @default(now())
+  createdAt           DateTime       @default(now())
 
   @@index([sampleId])
   @@index([assignedToId])
@@ -1118,7 +1200,11 @@ model Vendor {
 
   quotations     Quotation[]
   purchaseOrders PurchaseOrder[]
-  portalUsers    User[]          @relation("VendorPortalUser")
+  bills          VendorBill[]
+  calibrations   CalibrationRecord[]
+  repairs        EquipmentRepair[]
+  gatePasses     GatePass[]
+  portalUsers    User[]              @relation("VendorPortalUser")
 
   @@index([company])
 }
@@ -1126,10 +1212,10 @@ model Vendor {
 // Purchase Request (SSOT §10): initiator -> verifier (OM @ Lahore / Lab Manager
 // @ RYK, D18) -> COO approves. Mixed-path PRs allowed; path is per line (D10/BR-18).
 model PurchaseRequest {
-  id            String   @id @default(uuid())
-  prNo          String   @unique
+  id            String    @id @default(uuid())
+  prNo          String    @unique
   requestedById String
-  status        PRStatus @default(SUBMITTED)
+  status        PRStatus  @default(SUBMITTED)
   note          String?
   facilityId    String
   sectionId     String
@@ -1137,11 +1223,13 @@ model PurchaseRequest {
   verifiedAt    DateTime?
   approvedById  String?
   approvedAt    DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   lines      PRLine[]
   quotations Quotation[]
   pos        PurchaseOrder[]
+  // Set when this PR was raised by an equipment repair case (Module 05 §5.2).
+  repair     EquipmentRepair?
 
   @@index([facilityId])
   @@index([sectionId])
@@ -1206,6 +1294,7 @@ model PurchaseOrder {
 
   lines    PurchaseOrderLine[]
   receipts GoodsReceipt[]
+  bills    VendorBill[]
 
   @@index([prId])
 }
@@ -1236,16 +1325,10 @@ model Store {
   facilityId String
   createdAt  DateTime  @default(now())
 
-  stock StockTransaction[]
-  grns  GRN[]
-  items InventoryItem[]
-}
-
-// User-reported stock level for an inventory item.
-enum StockStatus {
-  OK
-  LOW // running low — needs reordering
-  END // finished / out of stock
+  stock     StockTransaction[]
+  grns      GRN[]
+  items     InventoryItem[]
+  equipment Equipment[]
 }
 
 enum InventoryCategory {
@@ -1263,25 +1346,30 @@ enum InventoryCategory {
 // transactional StockTransaction ledger; this is the catalog with locations,
 // pack sizes, makes/models and on-hand counts.
 model InventoryItem {
-  id         String            @id @default(uuid())
-  storeId    String
-  store      Store             @relation(fields: [storeId], references: [id])
-  category   InventoryCategory
-  code       String? // item ID / equipment code
-  name       String
-  pack       String? // chemical pack size (e.g. "500 g")
-  rack       String? // storage location (e.g. "R1")
-  make       String? // glassware/equipment make
-  model      String? // equipment model
-  parts      String? // equipment parts/accessories
-  subCategory String? // chemical category (Salt/Acid/…)
-  quantity   Int? // on-hand balance ("Nill" → 0)
-  lotNo      String? // LOT / batch number
-  stockStatus     StockStatus @default(OK) // user-reported level (low / finished)
-  stockMarkedById String?
-  stockMarkedAt   DateTime?
-  facilityId String
-  createdAt  DateTime          @default(now())
+  id            String            @id @default(uuid())
+  storeId       String
+  store         Store             @relation(fields: [storeId], references: [id])
+  category      InventoryCategory
+  code          String? // item ID / equipment code
+  name          String
+  pack          String? // packing size value (e.g. "500")
+  unit          String? // measure unit for the packing size (e.g. "g", "mL", "pcs")
+  specification String? // equipment specification (no packing size)
+  accessories   String[] // equipment accessories (multiple)
+  rack          String? // storage location (e.g. "R1")
+  make          String? // glassware/equipment make
+  model         String? // equipment model
+  parts         String? // equipment parts/accessories
+  subCategory   String? // chemical category (Salt/Acid/…)
+  quantity      Int? // on-hand balance ("Nill" → 0)
+  lotNo         String? // LOT / batch number
+  expiryDate    DateTime? // where applicable (chemicals, standards)
+  reorderLevel  Int? // minimum on-hand before it needs reordering (null → global default)
+  facilityId    String
+  createdAt     DateTime          @default(now())
+
+  // Equipment-category rows are what the equipment register draws from.
+  equipment Equipment[]
 
   @@index([storeId])
   @@index([facilityId])
@@ -1290,15 +1378,15 @@ model InventoryItem {
 
 // A delivery against a PO. Multiple per PO supports partial receipts (BR-19).
 model GoodsReceipt {
-  id           String        @id @default(uuid())
-  poId         String
-  po           PurchaseOrder @relation(fields: [poId], references: [id])
-  receivedById String?
-  receivedAt   DateTime      @default(now())
-  status       ReceiptStatus @default(PENDING_INSPECTION)
+  id            String        @id @default(uuid())
+  poId          String
+  po            PurchaseOrder @relation(fields: [poId], references: [id])
+  receivedById  String?
+  receivedAt    DateTime      @default(now())
+  status        ReceiptStatus @default(PENDING_INSPECTION)
   inspectedById String?
-  inspectedAt  DateTime?
-  note         String?
+  inspectedAt   DateTime?
+  note          String?
 
   grn        GRN?
   inspection IncomingInspection?
@@ -1395,22 +1483,35 @@ model StockTransaction {
 // Equipment & Traceability (Module 05)
 // ----------------------------------------------------------------------------
 
+// Equipment register. Only equipment carried on the main store's or a sub-store's
+// inventory is registered, so each asset points at the store it belongs to and at
+// its row in that store's inventory. `location` is where the instrument actually
+// stands in the lab (room/bench) — not its store rack. Both links are optional to
+// keep pre-existing rows readable; registration itself requires them.
 model Equipment {
-  id         String          @id @default(uuid())
-  assetTag   String          @unique
-  name       String
-  make       String?
-  model      String?
-  serialNo   String?
-  location   String?
-  status     EquipmentStatus @default(ACTIVE)
-  facilityId String
-  sectionId  String
-  createdAt  DateTime        @default(now())
+  id              String          @id @default(uuid())
+  assetTag        String          @unique
+  name            String
+  make            String?
+  model           String?
+  serialNo        String?
+  storeId         String?
+  store           Store?          @relation(fields: [storeId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem?  @relation(fields: [inventoryItemId], references: [id])
+  location        String? // where it stands in the lab (room / bench)
+  status          EquipmentStatus @default(ACTIVE)
+  facilityId      String
+  sectionId       String
+  createdAt       DateTime        @default(now())
 
   calibrations   CalibrationRecord[]
   qualifications Qualification[]
+  repairs        EquipmentRepair[]
+  gatePasses     GatePass[]
 
+  @@index([storeId])
+  @@index([inventoryItemId])
   @@index([facilityId])
   @@index([sectionId])
 }
@@ -1423,13 +1524,107 @@ model CalibrationRecord {
   equipment               Equipment @relation(fields: [equipmentId], references: [id])
   calibratedOn            DateTime
   validUntil              DateTime
-  calibratedBy            String? // vendor name or "internal"
-  certificateAttachmentId String?
+  // Who calibrated it: a registered vendor, or the lab itself. `calibratedBy`
+  // keeps the name as it stood at the time, so the record still reads correctly
+  // if the vendor is later renamed or removed.
+  vendorId                String?
+  vendor                  Vendor?   @relation(fields: [vendorId], references: [id])
+  calibratedBy            String? // vendor name snapshot, or "Internal"
+  // The certificate is recorded by number; the lab keeps the paper copy.
+  certificateNo           String?
+  certificateAttachmentId String? // legacy uploads, kept readable
   note                    String?
   createdById             String?
   createdAt               DateTime  @default(now())
 
   @@index([equipmentId])
+  @@index([vendorId])
+}
+
+// ----------------------------------------------------------------------------
+// Equipment repair (Module 05 §5.2). The commercial half of a repair is an
+// ordinary Purchase Request running the full procurement path; this case file
+// carries what procurement does not know — why the asset is down, where the
+// work happens, its physical movement, the acceptance and the return to
+// service. Every repair raises exactly one PR.
+// ----------------------------------------------------------------------------
+model EquipmentRepair {
+  id          String    @id @default(uuid())
+  repairNo    String    @unique // REP-<FACILITY>-<year>-0001
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+
+  kind   RepairKind
+  reason String // the reported fault, or the maintenance scope
+  site   RepairSite
+  status RepairStatus @default(REQUESTED)
+
+  prId String          @unique
+  pr   PurchaseRequest @relation(fields: [prId], references: [id])
+
+  // Nominated when the repair is raised, then overwritten by whoever wins the
+  // comparative. `vendorName` is the name as it stood, so an old case still
+  // reads correctly if the vendor is renamed or removed.
+  vendorId   String?
+  vendor     Vendor? @relation(fields: [vendorId], references: [id])
+  vendorName String?
+
+  reportedOn       DateTime       @default(now())
+  receivedOn       DateTime? // back at the lab, or on-site work finished
+  inspectionResult ReceiptStatus? // ACCEPTED / REJECTED by the inspector
+  inspectedById    String?
+  inspectedAt      DateTime?
+  inspectionNote   String?
+  closedAt         DateTime? // returned to service, or cancelled
+  note             String?
+
+  requestedById String
+  facilityId    String // the asset's lab, not the raiser's (BR-6)
+  sectionId     String
+  createdAt     DateTime @default(now())
+
+  gatePasses     GatePass[]
+  qualifications Qualification[]
+
+  @@index([equipmentId])
+  @@index([status])
+  @@index([facilityId])
+  @@index([sectionId])
+  @@index([vendorId])
+}
+
+// Authorises a registered asset to leave the facility for off-site repair, and
+// closes its return against the same pass (BR-EQ-5). Its own model rather than
+// columns on the repair: a rejected repair can legitimately send the asset out
+// a second time, and each movement keeps its own number, dates and signatures.
+model GatePass {
+  id          String          @id @default(uuid())
+  gatePassNo  String          @unique // GP-<FACILITY>-<year>-0001
+  repairId    String
+  repair      EquipmentRepair @relation(fields: [repairId], references: [id])
+  equipmentId String
+  equipment   Equipment       @relation(fields: [equipmentId], references: [id])
+
+  vendorId   String?
+  vendor     Vendor? @relation(fields: [vendorId], references: [id])
+  vendorName String? // snapshot, as printed on the pass
+
+  outDate            DateTime
+  expectedReturnDate DateTime?
+  actualReturnDate   DateTime?
+  status             GatePassStatus @default(OUT)
+  accessories        String? // what left with it (probes, cables, manuals)
+  purpose            String?
+  issuedById         String?
+  receivedById       String? // who closed it on return
+  facilityId         String
+  sectionId          String
+  createdAt          DateTime       @default(now())
+
+  @@index([repairId])
+  @@index([equipmentId])
+  @@index([status])
+  @@index([facilityId])
 }
 
 // Consumable / reference materials register (Module 05): chemicals (CoA/MSDS),
@@ -1458,8 +1653,8 @@ model MaterialItem {
 // ----------------------------------------------------------------------------
 
 model ChartOfAccount {
-  id    String      @id @default(uuid())
-  code  String      @unique
+  id    String        @id @default(uuid())
+  code  String        @unique
   name  String
   type  AccountType
   lines JournalLine[]
@@ -1468,12 +1663,12 @@ model ChartOfAccount {
 // A balanced journal entry (sum debits = sum credits). Append-only (BR-16);
 // corrections via reversing entries. Amounts in PKR paisa.
 model JournalEntry {
-  id          String       @id @default(uuid())
-  entryNo     String       @unique
-  date        DateTime     @default(now())
+  id          String   @id @default(uuid())
+  entryNo     String   @unique
+  date        DateTime @default(now())
   memo        String?
   createdById String?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime @default(now())
 
   lines JournalLine[]
 }
@@ -1492,30 +1687,31 @@ model JournalLine {
 }
 
 model Invoice {
-  id             String        @id @default(uuid())
-  invoiceNo      String        @unique
+  id             String         @id @default(uuid())
+  invoiceNo      String         @unique
   clientId       String
-  client         Client        @relation(fields: [clientId], references: [id])
+  client         Client         @relation(fields: [clientId], references: [id])
   // The accepted quotation this invoice bills, when raised from one (testing
   // work). Ad-hoc invoices have none.
   quotationId    String?
   quotation      TestQuotation? @relation(fields: [quotationId], references: [id])
   // subtotal is the gross of line prices; amount is the net after per-line
   // discounts and the invoice-level total discount (PERCENT/AMOUNT/NONE).
-  subtotal       Int           @default(0) // paisa
-  discountKind   String        @default("NONE")
-  discountValue  Int           @default(0)
-  taxPct         Int           @default(0) // services sales tax, whole percent
+  subtotal       Int            @default(0) // paisa
+  discountKind   String         @default("NONE")
+  discountValue  Int            @default(0)
+  taxPct         Int            @default(0) // services sales tax, whole percent
   amount         Int // paisa — net payable, tax-inclusive
-  status         InvoiceStatus @default(ISSUED)
+  status         InvoiceStatus  @default(ISSUED)
   memo           String?
   issuedById     String?
   journalEntryId String?
   facilityId     String
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime       @default(now())
 
   items    InvoiceItem[]
   payments Payment[]
+  qcLots   QcLot[]
 
   @@index([clientId])
   @@index([facilityId])
@@ -1624,6 +1820,86 @@ model OutsourcePayment {
   @@index([billId])
 }
 
+// ----------------------------------------------------------------------------
+// Vendor billing (accounts payable) + running expenses. Procurement stops at the
+// PO/GRN, which is a commitment, not a cost: these two record what a purchase
+// actually costs and when it was settled, so "payable to vendors" and the
+// expense breakdown are ledger figures rather than estimates. Mirrors the
+// OutsourceBill/OutsourcePayment pair used for external labs.
+// ----------------------------------------------------------------------------
+
+// A supplier's invoice, normally against a purchase order. Posts
+// Dr Purchases & Supplies (net) / Dr Input Tax / Cr Accounts Payable.
+model VendorBill {
+  id              String         @id @default(uuid())
+  billNo          String         @unique
+  vendorId        String
+  vendor          Vendor         @relation(fields: [vendorId], references: [id])
+  poId            String?
+  po              PurchaseOrder? @relation(fields: [poId], references: [id])
+  vendorInvoiceNo String? // the vendor's own invoice number
+  subtotal        Int            @default(0) // paisa — net of tax
+  taxPct          Int            @default(0) // input sales tax, whole percent
+  amount          Int // paisa — gross payable (net + tax)
+  status          InvoiceStatus  @default(ISSUED)
+  memo            String?
+  journalEntryId  String?
+  facilityId      String
+  createdById     String?
+  createdAt       DateTime       @default(now())
+
+  payments VendorPayment[]
+
+  @@index([vendorId])
+  @@index([poId])
+  @@index([facilityId])
+}
+
+// A payment made to a vendor against a bill (Dr Accounts Payable / Cr Bank).
+model VendorPayment {
+  id             String     @id @default(uuid())
+  billId         String
+  bill           VendorBill @relation(fields: [billId], references: [id])
+  amount         Int // paisa
+  method         String?
+  paidById       String?
+  journalEntryId String?
+  createdAt      DateTime   @default(now())
+
+  @@index([billId])
+}
+
+// What a running cost was for. Decides the expense account it posts to:
+// UTILITY -> 5200 Utilities, everything else -> 5900 Other Expenses.
+enum ExpenseCategory {
+  UTILITY // electricity, gas, water, internet, phone
+  RENT
+  TRANSPORT
+  MAINTENANCE
+  OFFICE
+  OTHER
+}
+
+// A directly-settled running cost with no vendor bill behind it — utility bills,
+// rent, fuel, repairs. Posts Dr <expense account> / Cr Bank (or Cash).
+model Expense {
+  id             String          @id @default(uuid())
+  expenseNo      String          @unique
+  category       ExpenseCategory
+  payee          String? // who was paid (utility company, landlord, …)
+  memo           String?
+  amount         Int // paisa
+  paidFrom       String          @default("BANK") // BANK -> credits 1010, CASH -> 1000
+  spentAt        DateTime        @default(now())
+  journalEntryId String?
+  facilityId     String
+  createdById    String?
+  createdAt      DateTime        @default(now())
+
+  @@index([facilityId])
+  @@index([category])
+}
+
 // Versioned salary structure (one current per user). Amounts in PKR paisa;
 // providentFundPct is a whole-number percent of basic.
 model SalaryStructure {
@@ -1634,6 +1910,7 @@ model SalaryStructure {
   conveyance       Int      @default(0)
   medical          Int      @default(0)
   otherAllowances  Int      @default(0)
+  cashAllowance    Int      @default(0) // allowance paid in cash — not taxable
   providentFundPct Int      @default(0)
   eobi             Int      @default(0)
   effectiveFrom    DateTime @default(now())
@@ -1664,6 +1941,7 @@ model PayrollItem {
   run           PayrollRun @relation(fields: [runId], references: [id])
   userId        String
   gross         Int
+  cashAllowance Int        @default(0) // non-taxable cash allowance portion of gross
   incomeTax     Int        @default(0)
   providentFund Int        @default(0)
   eobi          Int        @default(0)
@@ -1678,6 +1956,10 @@ model Qualification {
   id          String              @id @default(uuid())
   equipmentId String
   equipment   Equipment           @relation(fields: [equipmentId], references: [id])
+  // Set when this qualification is the requalification of a repair, so the
+  // IQ -> OQ -> PQ gate can be checked per repair rather than per asset.
+  repairId    String?
+  repair      EquipmentRepair?    @relation(fields: [repairId], references: [id])
   type        QualificationType
   result      QualificationResult
   performedOn DateTime
@@ -1686,6 +1968,7 @@ model Qualification {
   createdAt   DateTime            @default(now())
 
   @@index([equipmentId])
+  @@index([repairId])
 }
 
 // Request to move stock from the main store to a sub-store (BR-10).
@@ -1752,24 +2035,32 @@ enum QcLotStatus {
 // A product/raw-material type with its test parameter, identity basis, spec
 // limits, and the parent product it traces to (self-referential lineage).
 model ProductType {
-  id            String       @id @default(uuid())
+  id            String        @id @default(uuid())
   name          String
   stage         ProductStage
   basis         LotBasis
   testParameter String // e.g. "Total Zinc", "Bio-Active Zinc"
-  unit          String       @default("%")
+  unit          String        @default("%")
   specMin       Float? // acceptable minimum for auto pass/fail
   specMax       Float? // acceptable maximum (optional)
   parentTypeId  String?
   parentType    ProductType?  @relation("ProductLineage", fields: [parentTypeId], references: [id])
   children      ProductType[] @relation("ProductLineage")
-  sortOrder     Int          @default(0)
+  sortOrder     Int           @default(0)
+  // The Parameter master row this product's test is billed at. The RYK monthly
+  // consolidated invoice prices every approved lot from this parameter's rate,
+  // so pricing lives in one place (Parameters) and is never retyped here.
+  // Unset — or set to a parameter with no price — means the product is not
+  // billable yet: its lots are skipped and stay open for a later run.
+  parameterId   String?
+  parameter     Parameter?    @relation(fields: [parameterId], references: [id])
   facilityId    String
-  createdAt     DateTime     @default(now())
+  createdAt     DateTime      @default(now())
 
   lots QcLot[]
 
   @@unique([facilityId, name])
+  @@index([parameterId])
 }
 
 // A physical lot sampled for QC — a vehicle load or a production batch. Carries
@@ -1796,6 +2087,11 @@ model QcLot {
   testedAt      DateTime?
   approvedById  String? // Lab Manager who reviewed
   approvedAt    DateTime?
+  // Set when the lot is billed on a monthly consolidated invoice. Non-null means
+  // billed: the generator only ever picks up lots where this is null, which is
+  // what makes month-end generation idempotent and stops double-billing.
+  invoiceId     String?
+  invoice       Invoice?    @relation(fields: [invoiceId], references: [id])
   facilityId    String
   createdAt     DateTime    @default(now())
 
@@ -1803,6 +2099,7 @@ model QcLot {
   children QcLotLink[] @relation("LotParent")
 
   @@index([productTypeId])
+  @@index([invoiceId])
   @@index([facilityId])
   @@index([status])
   @@index([assignedToId])

@@ -9,6 +9,7 @@ import { limitText } from "@/lib/conformity";
 import {
   canApproveSample,
   canCoordinateTesting,
+  ANALYST_DESIGNATIONS,
 } from "@/lib/auth/perms";
 import { approveSample, verifySample } from "@/lib/actions/testing";
 import { ResultEntryForm } from "./result-entry-form";
@@ -84,7 +85,7 @@ export default async function SampleDetailPage({
     canAssign
       ? prisma.user.findMany({
           where: {
-            designation: "ANALYST",
+            designation: { in: [...ANALYST_DESIGNATIONS] },
             status: "ACTIVE",
             facilityId: sample.facilityId,
           },

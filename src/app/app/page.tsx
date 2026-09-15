@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { readScope } from "@/lib/db/scope";
+import { stockLevel } from "@/lib/inventory";
 import { StatCard } from "@/components/stat-card";
 import { AuditLogTable } from "@/components/audit-log-table";
 import { getAuditLogs } from "@/lib/audit/query";
@@ -38,7 +40,7 @@ export default async function DashboardPage() {
     getAuditLogs(user, { take: 8 }),
   ]);
 
-  const [samplesTotal, samplesAwaiting, prsPending, equipNeedsCal] =
+  const [samplesTotal, samplesAwaiting, prsPending, equipNeedsCal, invItems] =
     await Promise.all([
       prisma.sample.count({ where: scope }),
       prisma.sample.count({ where: { ...scope, status: "REGISTERED" } }),
@@ -48,7 +50,14 @@ export default async function DashboardPage() {
       prisma.equipment.count({
         where: { ...scope, calibrations: { none: { validUntil: { gte: new Date() } } } },
       }),
+      prisma.inventoryItem.findMany({
+        select: { quantity: true, reorderLevel: true },
+      }),
     ]);
+  // Items at or below their reorder point (across all stores).
+  const toReorder = invItems.filter(
+    (i) => stockLevel(i.quantity, i.reorderLevel) !== "OK",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -85,6 +94,13 @@ export default async function DashboardPage() {
           value={equipNeedsCal}
           hint="Expired or none"
         />
+        <Link href="/app/inventory" className="block transition-opacity hover:opacity-80">
+          <StatCard
+            label="To reorder"
+            value={toReorder}
+            hint="Items at/below reorder level"
+          />
+        </Link>
       </div>
 
       <div className="space-y-2">

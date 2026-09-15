@@ -73,6 +73,16 @@ export default async function PRDetailPage({
         },
         orderBy: { createdAt: "asc" },
       },
+      // Set when this requisition was raised by an equipment repair, so the
+      // Purchase Officer can see what the work is actually for.
+      repair: {
+        select: {
+          id: true,
+          repairNo: true,
+          site: true,
+          equipment: { select: { assetTag: true, name: true } },
+        },
+      },
     },
   });
   if (!pr) notFound();
@@ -125,6 +135,19 @@ export default async function PRDetailPage({
             {requester ? ` · ${designationLabel(requester.designation)}` : ""} ·{" "}
             {formatDate(pr.createdAt)}
           </p>
+          {pr.repair && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Equipment repair{" "}
+              <Link
+                href={`/app/equipment/repairs/${pr.repair.id}`}
+                className="font-mono underline"
+              >
+                {pr.repair.repairNo}
+              </Link>{" "}
+              · {pr.repair.equipment.assetTag} {pr.repair.equipment.name} ·{" "}
+              {pr.repair.site === "OFF_SITE" ? "off-site" : "on-site"}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Link

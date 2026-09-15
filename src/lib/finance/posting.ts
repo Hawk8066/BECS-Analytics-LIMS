@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { nextNumber } from "@/lib/numbering";
+import { ACCOUNTS } from "@/lib/finance/accounts";
 
 // Double-entry posting (ADR-0004, BR-16). Every financial event posts a balanced
 // journal entry (Σ debits = Σ credits). Amounts in PKR paisa.
@@ -24,8 +25,20 @@ export async function postJournal(opts: {
     where: { code: { in: codes } },
   });
   const byCode = new Map(accounts.map((a) => [a.code, a.id]));
-  for (const c of codes)
-    if (!byCode.has(c)) throw new Error(`Account ${c} not found.`);
+  // A code in the canonical chart that the database hasn't got yet is created on
+  // first use, so adding an account is a code change alone — no reseed. Anything
+  // outside the chart is a typo and still fails.
+  for (const c of codes) {
+    if (byCode.has(c)) continue;
+    const canonical = ACCOUNTS.find((a) => a.code === c);
+    if (!canonical) throw new Error(`Account ${c} not found.`);
+    const created = await prisma.chartOfAccount.upsert({
+      where: { code: c },
+      update: {},
+      create: canonical,
+    });
+    byCode.set(c, created.id);
+  }
 
   const year = new Date().getFullYear();
   const entryNo = await nextNumber({ key: `JE:${year}`, prefix: "JE", year, pad: 6 });

@@ -2,8 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
-import { canRegisterClient } from "@/lib/auth/perms";
+import { canRegisterClient, canViewFinance } from "@/lib/auth/perms";
+import { docBalance } from "@/lib/finance/summary";
 import { formatDate } from "@/lib/format";
+import { Money } from "@/components/finance/money";
 import { buttonVariants } from "@/components/ui/button";
 import { ImportExcel } from "@/components/import-excel";
 import {
@@ -29,10 +31,16 @@ export default async function ClientsPage({
   const q = qParam?.trim() || null;
   const needle = q?.toLowerCase() ?? "";
 
+  const showFinance = canViewFinance(user.designation);
   // Sorted by sector (then company) so the list groups by sector by default.
   const clients = await prisma.client.findMany({
     where: user.canReadCrossSection ? {} : { facilityId: user.facilityId },
     orderBy: [{ sector: "asc" }, { company: "asc" }],
+    include: {
+      invoices: {
+        select: { amount: true, payments: { select: { amount: true } } },
+      },
+    },
   });
 
   const sectors = [
@@ -150,6 +158,9 @@ export default async function ClientsPage({
               <TableHead>NTN</TableHead>
               <TableHead>STN</TableHead>
               <TableHead>Registered</TableHead>
+              {showFinance && (
+                <TableHead className="text-right">Receivable</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -174,11 +185,19 @@ export default async function ClientsPage({
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   {formatDate(c.createdAt)}
                 </TableCell>
+                {showFinance && (
+                  <TableCell className="text-right">
+                    <Money value={docBalance(c.invoices).outstanding} />
+                  </TableCell>
+                )}
               </TableRow>
             ))}
             {visible.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground">
+                <TableCell
+                  colSpan={showFinance ? 10 : 9}
+                  className="text-center text-muted-foreground"
+                >
                   {sector ? `No clients in ${sector}.` : "No clients yet."}
                 </TableCell>
               </TableRow>

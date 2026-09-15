@@ -1,21 +1,36 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { addQualification, type FormState } from "@/lib/actions/equipment";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 
-export function QualificationForm({ equipmentId }: { equipmentId: string }) {
+export function QualificationForm({
+  equipmentId,
+  repairId,
+  onDone,
+}: {
+  equipmentId: string;
+  /** Set when requalifying after a repair — scopes the IQ → OQ → PQ order. */
+  repairId?: string;
+  onDone?: () => void;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     addQualification,
     {},
   );
+
+  useEffect(() => {
+    if (state.ok) onDone?.();
+  }, [state.ok, onDone]);
+
   return (
     <form
       action={formAction}
-      className="grid gap-3 border-t pt-3 sm:grid-cols-[90px_110px_160px_auto] sm:items-end"
+      className="grid gap-3 sm:grid-cols-[90px_110px_160px_auto] sm:items-end"
     >
       <input type="hidden" name="equipmentId" value={equipmentId} />
+      {repairId && <input type="hidden" name="repairId" value={repairId} />}
       <div className="grid gap-1">
         <label className="text-xs text-muted-foreground">Type</label>
         <select

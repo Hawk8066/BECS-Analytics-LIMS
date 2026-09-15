@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import { canApproveLeave } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { publish } from "@/lib/feed/publish";
 
 export type FormState = { error?: string };
 
@@ -53,6 +54,15 @@ export async function applyLeave(
     facilityId: actor.facilityId,
     sectionId: actor.sectionId,
   });
+  const applicant = await prisma.personnelProfile.findUnique({
+    where: { userId: actor.id },
+    select: { fullName: true },
+  });
+  await publish({
+    template: "leaveApplied",
+    params: { who: applicant?.fullName ?? actor.email, type: String(d.type) },
+    actor,
+  });
 
   revalidatePath("/app/leave");
   return {};
@@ -82,6 +92,18 @@ export async function decideLeave(formData: FormData): Promise<void> {
     after: { status: decision },
     facilityId: leave.facilityId,
     sectionId: leave.sectionId,
+  });
+  const applicant = await prisma.personnelProfile.findUnique({
+    where: { userId: leave.userId },
+    select: { fullName: true },
+  });
+  await publish({
+    template: "leaveDecided",
+    params: { who: applicant?.fullName ?? "An employee", status: decision },
+    actor,
+    facilityId: leave.facilityId,
+    sectionId: leave.sectionId,
+    to: [leave.userId],
   });
 
   revalidatePath("/app/leave");
