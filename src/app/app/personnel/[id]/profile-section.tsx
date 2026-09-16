@@ -54,16 +54,25 @@ function TextField({
   label,
   defaultValue,
   type = "text",
+  invalid,
 }: {
   name: string;
   label: string;
   defaultValue: string;
   type?: string;
+  invalid?: boolean;
 }) {
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} type={type} defaultValue={defaultValue} />
+      <Input
+        id={name}
+        name={name}
+        type={type}
+        defaultValue={defaultValue}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? "profile-error" : undefined}
+      />
     </div>
   );
 }
@@ -89,6 +98,11 @@ export function ProfileSection({
   useEffect(() => {
     if (state.ok) setEditing(false);
   }, [state.ok]);
+
+  // After a rejected submit, show what the user typed rather than what is
+  // stored. React 19 resets the form when the action completes, so without this
+  // a duplicate CNIC would silently discard every other edit they had made.
+  const v = (name: keyof ProfileValues) => state.values?.[name] ?? values[name];
 
   // Keep any pre-existing non-standard title selectable so a save never drops it.
   const titleOptions =
@@ -146,13 +160,13 @@ export function ProfileSection({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField name="fullName" label="Full name" defaultValue={values.fullName} />
+            <TextField name="fullName" label="Full name" defaultValue={v("fullName")} />
             <div className="grid gap-1.5">
               <Label htmlFor="title">Title</Label>
               <select
                 id="title"
                 name="title"
-                defaultValue={values.title}
+                defaultValue={v("title")}
                 className="h-9 rounded-md border bg-transparent px-2 text-sm"
               >
                 <option value="">— none —</option>
@@ -163,15 +177,20 @@ export function ProfileSection({
                 ))}
               </select>
             </div>
-            <TextField name="fatherName" label="Father's name" defaultValue={values.fatherName} />
-            <TextField name="cnic" label="CNIC" defaultValue={values.cnic} />
-            <TextField name="contactNumber" label="Contact" defaultValue={values.contactNumber} />
+            <TextField name="fatherName" label="Father's name" defaultValue={v("fatherName")} />
+            <TextField
+              name="cnic"
+              label="CNIC"
+              defaultValue={v("cnic")}
+              invalid={state.field === "cnic"}
+            />
+            <TextField name="contactNumber" label="Contact" defaultValue={v("contactNumber")} />
             <div className="grid gap-1.5">
               <Label htmlFor="bloodGroup">Blood group</Label>
               <select
                 id="bloodGroup"
                 name="bloodGroup"
-                defaultValue={values.bloodGroup}
+                defaultValue={v("bloodGroup")}
                 className="h-9 rounded-md border bg-transparent px-2 text-sm"
               >
                 <option value="">— none —</option>
@@ -185,14 +204,14 @@ export function ProfileSection({
             <TextField
               name="emergencyContactName"
               label="Emergency contact name"
-              defaultValue={values.emergencyContactName}
+              defaultValue={v("emergencyContactName")}
             />
             <div className="grid gap-1.5">
               <Label htmlFor="emergencyContactRelation">Emergency contact relation</Label>
               <select
                 id="emergencyContactRelation"
                 name="emergencyContactRelation"
-                defaultValue={values.emergencyContactRelation}
+                defaultValue={v("emergencyContactRelation")}
                 className="h-9 rounded-md border bg-transparent px-2 text-sm"
               >
                 <option value="">— none —</option>
@@ -206,28 +225,36 @@ export function ProfileSection({
             <TextField
               name="emergencyContact"
               label="Emergency contact number"
-              defaultValue={values.emergencyContact}
+              defaultValue={v("emergencyContact")}
             />
             <div className="grid gap-1.5">
               <Label htmlFor="dateOfBirth">Date of birth</Label>
-              <DateInput id="dateOfBirth" name="dateOfBirth" defaultValue={values.dateOfBirth} />
+              <DateInput id="dateOfBirth" name="dateOfBirth" defaultValue={v("dateOfBirth")} />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="dateOfJoining">Date of joining</Label>
-              <DateInput id="dateOfJoining" name="dateOfJoining" defaultValue={values.dateOfJoining} />
+              <DateInput id="dateOfJoining" name="dateOfJoining" defaultValue={v("dateOfJoining")} />
             </div>
           </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor="skills">Skills</Label>
-            <Textarea id="skills" name="skills" rows={2} defaultValue={values.skills} />
+            <Textarea id="skills" name="skills" rows={2} defaultValue={v("skills")} />
           </div>
           <p className="text-xs text-muted-foreground">
             Education, Experience, Training and Publications are managed in their own
             sections below.
           </p>
 
-          {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+          {state.error && (
+            <p
+              id="profile-error"
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {state.error}
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button type="submit" disabled={pending}>

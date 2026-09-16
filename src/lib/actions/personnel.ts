@@ -11,9 +11,33 @@ import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publish } from "@/lib/feed/publish";
 import { saveFile } from "@/lib/storage";
-import { uniqueViolationMessage } from "@/lib/db/errors";
+import { uniqueViolation } from "@/lib/db/errors";
 
-export type FormState = { error?: string; ok?: boolean };
+export type FormState = {
+  error?: string;
+  ok?: boolean;
+  /**
+   * The field that caused the error, so the form can mark that input invalid
+   * instead of only printing a message at the bottom of a long form.
+   */
+  field?: string;
+  /**
+   * What was submitted, echoed back so the form can repopulate itself.
+   *
+   * React 19 resets an uncontrolled form once its action completes, so without
+   * this the user would see the error next to twelve blank inputs and have to
+   * retype everything — which makes reporting the error inline pointless.
+   */
+  values?: Record<string, string>;
+};
+
+/** Submitted values as plain strings, for echoing back on an error. */
+function submitted(formData: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of formData.entries())
+    if (typeof v === "string" && !k.startsWith("$")) out[k] = v;
+  return out;
+}
 
 
 
@@ -129,8 +153,13 @@ export async function completeOwnProfile(
       },
     });
   } catch (e) {
-    const dup = uniqueViolationMessage(e);
-    if (dup) return { error: dup };
+    const dup = uniqueViolation(e);
+    if (dup)
+      return {
+        error: dup.message,
+        field: dup.field ?? undefined,
+        values: submitted(formData),
+      };
     throw e;
   }
   await prisma.user.update({
@@ -219,8 +248,13 @@ export async function updatePersonnelProfile(
       create: { userId: d.userId, ...fields },
     });
   } catch (e) {
-    const dup = uniqueViolationMessage(e);
-    if (dup) return { error: dup };
+    const dup = uniqueViolation(e);
+    if (dup)
+      return {
+        error: dup.message,
+        field: dup.field ?? undefined,
+        values: submitted(formData),
+      };
     throw e;
   }
 
