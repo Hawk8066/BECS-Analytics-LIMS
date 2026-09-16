@@ -11,8 +11,11 @@ import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publish } from "@/lib/feed/publish";
 import { saveFile } from "@/lib/storage";
+import { uniqueViolationMessage } from "@/lib/db/errors";
 
 export type FormState = { error?: string; ok?: boolean };
+
+
 
 const designationValues = Object.values(Designation) as string[];
 
@@ -106,24 +109,30 @@ export async function completeOwnProfile(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const d = parsed.data;
 
-  await prisma.personnelProfile.update({
-    where: { userId: actor.id },
-    data: {
-      title: d.title || null,
-      fatherName: d.fatherName || null,
-      dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
-      cnic: d.cnic || null,
-      contactNumber: d.contactNumber || null,
-      bloodGroup: d.bloodGroup || null,
-      emergencyContact: d.emergencyContact || null,
-      education: d.education || null,
-      experience: d.experience || null,
-      publications: d.publications || null,
-      trainings: d.trainings || null,
-      skills: d.skills || null,
-      completedByUserAt: new Date(),
-    },
-  });
+  try {
+    await prisma.personnelProfile.update({
+      where: { userId: actor.id },
+      data: {
+        title: d.title || null,
+        fatherName: d.fatherName || null,
+        dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
+        cnic: d.cnic || null,
+        contactNumber: d.contactNumber || null,
+        bloodGroup: d.bloodGroup || null,
+        emergencyContact: d.emergencyContact || null,
+        education: d.education || null,
+        experience: d.experience || null,
+        publications: d.publications || null,
+        trainings: d.trainings || null,
+        skills: d.skills || null,
+        completedByUserAt: new Date(),
+      },
+    });
+  } catch (e) {
+    const dup = uniqueViolationMessage(e);
+    if (dup) return { error: dup };
+    throw e;
+  }
   await prisma.user.update({
     where: { id: actor.id },
     data: { status: "PENDING_APPROVAL" },
@@ -203,11 +212,17 @@ export async function updatePersonnelProfile(
     dateOfJoining: d.dateOfJoining ? new Date(d.dateOfJoining) : null,
   };
 
-  await prisma.personnelProfile.upsert({
-    where: { userId: d.userId },
-    update: fields,
-    create: { userId: d.userId, ...fields },
-  });
+  try {
+    await prisma.personnelProfile.upsert({
+      where: { userId: d.userId },
+      update: fields,
+      create: { userId: d.userId, ...fields },
+    });
+  } catch (e) {
+    const dup = uniqueViolationMessage(e);
+    if (dup) return { error: dup };
+    throw e;
+  }
 
   await writeAudit({
     actorId: actor.id,
