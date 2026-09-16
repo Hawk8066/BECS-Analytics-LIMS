@@ -49,6 +49,8 @@ export const isAnalyst = (d: Designation) =>
 export const canManagePersonnel = (d: Designation) => hasCapability("managePersonnel", d);
 /** Approve a profile — activates the account. */
 export const canApproveProfile = (d: Designation) => hasCapability("approveProfile", d);
+/** Deactivate a staff account (BR-12: retained, never hard-deleted) or restore it. */
+export const canDeactivateUser = (d: Designation) => hasCapability("deactivateUser", d);
 export const canManageFunctions = (d: Designation) => hasCapability("manageFunctions", d);
 export const canApproveFunction = (d: Designation) => hasCapability("approveFunction", d);
 /** Competence evaluators. */

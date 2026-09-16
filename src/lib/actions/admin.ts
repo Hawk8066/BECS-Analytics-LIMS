@@ -6,7 +6,12 @@ import { hash } from "argon2";
 import { requireUser } from "@/lib/auth/current-user";
 import { canAdminister } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { getModel, delegateFor, type AdminModel } from "@/lib/admin/registry";
+import {
+  getModel,
+  delegateFor,
+  isSensitiveField,
+  type AdminModel,
+} from "@/lib/admin/registry";
 import { coerce, CoerceError, toPlain } from "@/lib/admin/values";
 
 export type FormState = { error?: string; ok?: boolean };
@@ -17,6 +22,28 @@ async function requireAdmin() {
     throw new Error("Forbidden: application admin access required.");
   }
   return actor;
+}
+
+/**
+ * Strip sensitive columns before a row goes into the audit log.
+ *
+ * `writeAudit` copies whole rows into AuditLog.before/after, and /app/logs
+ * renders them — so without this every admin edit of a User wrote that user's
+ * Argon2 hash into an append-only table and displayed it. The audit log is
+ * deliberately immutable (BR-5), which means a leak there cannot be cleaned up
+ * afterwards; it has to not happen.
+ *
+ * Redacted rather than dropped, so the log still records that the field changed.
+ */
+function redact(
+  model: AdminModel,
+  row: Record<string, unknown> | null | undefined,
+): object {
+  const plain = toPlain(row) as Record<string, unknown>;
+  if (!plain || typeof plain !== "object") return {};
+  for (const key of Object.keys(plain))
+    if (isSensitiveField(model.name, key)) plain[key] = "[redacted]";
+  return plain;
 }
 
 // Pull scope stamps off a row (if the model carries them) for the audit entry.
@@ -89,8 +116,8 @@ export async function adminSaveRecord(
         action: "UPDATE",
         entityType: model.name,
         entityId: id,
-        before: toPlain(before) as object,
-        after: toPlain(after) as object,
+        before: redact(model, before),
+        after: redact(model, after),
         ...scopeOf(after),
       });
     } else {
@@ -134,7 +161,7 @@ export async function adminDeleteRecord(formData: FormData): Promise<void> {
     action: "DELETE",
     entityType: model.name,
     entityId: id,
-    before: toPlain(before) as object,
+    before: redact(model, before),
     ...scopeOf(before),
   });
 

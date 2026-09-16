@@ -7,7 +7,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
-import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms";
+import {
+  canApproveProfile,
+  canDeactivateUser,
+  canManagePersonnel,
+  isAdmin,
+} from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publish } from "@/lib/feed/publish";
 import { saveFile } from "@/lib/storage";
@@ -128,6 +133,11 @@ export async function completeOwnProfile(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireUser();
+  // Onboarding is for accounts still working towards ACTIVE. A deactivated user
+  // must not be able to POST here and re-enter the approval queue; the page-level
+  // branch is cosmetic against a direct request.
+  if (actor.status === "NON_ACTIVE")
+    return { error: "This account is deactivated." };
   const parsed = ProfileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -707,5 +717,68 @@ export async function approveProfile(formData: FormData): Promise<void> {
     to: [userId], // approval unblocks the whole app for them
   });
 
+  revalidatePath("/app/personnel");
+}
+
+/**
+ * Deactivate a staff account, or restore one.
+ *
+ * `NON_ACTIVE` has existed in the schema since the first migration but nothing
+ * ever wrote it — it was reachable only by hand-editing the row in the generic
+ * admin panel. BR-12 (schema.prisma, UserStatus) says a resigned person is
+ * "retained, never hard-deleted", and the foreign keys enforce it: a staff
+ * user's PersonnelProfile, Signatures, Attendance and Authorizations are all
+ * ON DELETE RESTRICT, so deletion is not merely discouraged but impossible
+ * without destroying the ISO 17025 evidence that makes their signed reports
+ * defensible. Deactivation is the offboarding mechanism.
+ *
+ * Effect is immediate: `getSessionUser` re-reads status from the database on
+ * every request, so an open session stops working on the deactivated user's
+ * next page load, and `src/auth.ts` refuses a fresh sign-in.
+ */
+export async function setUserActive(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canDeactivateUser(actor.designation))
+    throw new Error("Not permitted to change account status.");
+
+  const userId = String(formData.get("userId") ?? "");
+  const activate = String(formData.get("activate") ?? "") === "true";
+
+  // Locking yourself out would need another admin to undo, so refuse it.
+  if (userId === actor.id)
+    throw new Error("You cannot change the status of your own account.");
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      status: true,
+      facilityId: true,
+      sectionId: true,
+      profile: { select: { approvedByCooAt: true } },
+    },
+  });
+  if (!target) throw new Error("User not found.");
+
+  // Reactivating someone who never finished onboarding must not skip approval:
+  // send them back to the step they were at rather than straight to ACTIVE.
+  const restored = target.profile?.approvedByCooAt ? "ACTIVE" : "PENDING_APPROVAL";
+  const status = activate ? restored : "NON_ACTIVE";
+  if (status === target.status) return;
+
+  await prisma.user.update({ where: { id: userId }, data: { status } });
+
+  await writeAudit({
+    actorId: actor.id,
+    action: "UPDATE",
+    entityType: "User",
+    entityId: userId,
+    before: { status: target.status },
+    after: { status },
+    facilityId: target.facilityId,
+    sectionId: target.sectionId,
+  });
+
+  revalidatePath(`/app/personnel/${userId}`);
   revalidatePath("/app/personnel");
 }

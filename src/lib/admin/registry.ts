@@ -98,6 +98,27 @@ const PREFERRED_COLUMNS = [
   "createdAt",
 ];
 
+/**
+ * Fields the generic editor must never show or write, keyed by model.
+ *
+ * Editability is otherwise derived purely from the DMMF shape, which has no
+ * notion of sensitivity: `User.passwordHash` is just an optional String, so it
+ * was rendered as an ordinary text input PRE-FILLED WITH THE LIVE ARGON2 HASH,
+ * and could be overwritten with arbitrary text — bricking a login, or pasting
+ * one user's hash onto another account to impersonate them.
+ *
+ * Passwords are set through the dedicated `__newPassword` field, which hashes
+ * properly. This denylist closes the raw path.
+ */
+const SENSITIVE_FIELDS: Record<string, readonly string[]> = {
+  User: ["passwordHash"],
+};
+
+/** True when the generic admin editor must not expose this field at all. */
+export function isSensitiveField(model: string, field: string): boolean {
+  return (SENSITIVE_FIELDS[model] ?? []).includes(field);
+}
+
 function buildModel(m: Prisma.DMMF.Model): AdminModel {
   const idField = m.fields.find((f) => f.isId)?.name ?? null;
 
@@ -111,7 +132,9 @@ function buildModel(m: Prisma.DMMF.Model): AdminModel {
         !auto &&
         !f.isList &&
         type !== "unsupported" &&
-        f.kind !== "object";
+        f.kind !== "object" &&
+        // Never through the generic editor — see SENSITIVE_FIELDS above.
+        !isSensitiveField(m.name, f.name);
       return {
         name: f.name,
         type,
