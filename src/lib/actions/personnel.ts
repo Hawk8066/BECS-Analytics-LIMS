@@ -7,12 +7,44 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
-import { canApproveProfile, canManagePersonnel, isAdmin } from "@/lib/auth/perms";
+import {
+  canApproveProfile,
+  canDeactivateUser,
+  canManagePersonnel,
+  isAdmin,
+} from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publish } from "@/lib/feed/publish";
 import { saveFile } from "@/lib/storage";
+import { uniqueViolation } from "@/lib/db/errors";
 
-export type FormState = { error?: string; ok?: boolean };
+export type FormState = {
+  error?: string;
+  ok?: boolean;
+  /**
+   * The field that caused the error, so the form can mark that input invalid
+   * instead of only printing a message at the bottom of a long form.
+   */
+  field?: string;
+  /**
+   * What was submitted, echoed back so the form can repopulate itself.
+   *
+   * React 19 resets an uncontrolled form once its action completes, so without
+   * this the user would see the error next to twelve blank inputs and have to
+   * retype everything — which makes reporting the error inline pointless.
+   */
+  values?: Record<string, string>;
+};
+
+/** Submitted values as plain strings, for echoing back on an error. */
+function submitted(formData: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of formData.entries())
+    if (typeof v === "string" && !k.startsWith("$")) out[k] = v;
+  return out;
+}
+
+
 
 const designationValues = Object.values(Designation) as string[];
 
@@ -101,29 +133,45 @@ export async function completeOwnProfile(
   formData: FormData,
 ): Promise<FormState> {
   const actor = await requireUser();
+  // Onboarding is for accounts still working towards ACTIVE. A deactivated user
+  // must not be able to POST here and re-enter the approval queue; the page-level
+  // branch is cosmetic against a direct request.
+  if (actor.status === "NON_ACTIVE")
+    return { error: "This account is deactivated." };
   const parsed = ProfileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const d = parsed.data;
 
-  await prisma.personnelProfile.update({
-    where: { userId: actor.id },
-    data: {
-      title: d.title || null,
-      fatherName: d.fatherName || null,
-      dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
-      cnic: d.cnic || null,
-      contactNumber: d.contactNumber || null,
-      bloodGroup: d.bloodGroup || null,
-      emergencyContact: d.emergencyContact || null,
-      education: d.education || null,
-      experience: d.experience || null,
-      publications: d.publications || null,
-      trainings: d.trainings || null,
-      skills: d.skills || null,
-      completedByUserAt: new Date(),
-    },
-  });
+  try {
+    await prisma.personnelProfile.update({
+      where: { userId: actor.id },
+      data: {
+        title: d.title || null,
+        fatherName: d.fatherName || null,
+        dateOfBirth: d.dateOfBirth ? new Date(d.dateOfBirth) : null,
+        cnic: d.cnic || null,
+        contactNumber: d.contactNumber || null,
+        bloodGroup: d.bloodGroup || null,
+        emergencyContact: d.emergencyContact || null,
+        education: d.education || null,
+        experience: d.experience || null,
+        publications: d.publications || null,
+        trainings: d.trainings || null,
+        skills: d.skills || null,
+        completedByUserAt: new Date(),
+      },
+    });
+  } catch (e) {
+    const dup = uniqueViolation(e);
+    if (dup)
+      return {
+        error: dup.message,
+        field: dup.field ?? undefined,
+        values: submitted(formData),
+      };
+    throw e;
+  }
   await prisma.user.update({
     where: { id: actor.id },
     data: { status: "PENDING_APPROVAL" },
@@ -203,11 +251,22 @@ export async function updatePersonnelProfile(
     dateOfJoining: d.dateOfJoining ? new Date(d.dateOfJoining) : null,
   };
 
-  await prisma.personnelProfile.upsert({
-    where: { userId: d.userId },
-    update: fields,
-    create: { userId: d.userId, ...fields },
-  });
+  try {
+    await prisma.personnelProfile.upsert({
+      where: { userId: d.userId },
+      update: fields,
+      create: { userId: d.userId, ...fields },
+    });
+  } catch (e) {
+    const dup = uniqueViolation(e);
+    if (dup)
+      return {
+        error: dup.message,
+        field: dup.field ?? undefined,
+        values: submitted(formData),
+      };
+    throw e;
+  }
 
   await writeAudit({
     actorId: actor.id,
@@ -658,5 +717,68 @@ export async function approveProfile(formData: FormData): Promise<void> {
     to: [userId], // approval unblocks the whole app for them
   });
 
+  revalidatePath("/app/personnel");
+}
+
+/**
+ * Deactivate a staff account, or restore one.
+ *
+ * `NON_ACTIVE` has existed in the schema since the first migration but nothing
+ * ever wrote it — it was reachable only by hand-editing the row in the generic
+ * admin panel. BR-12 (schema.prisma, UserStatus) says a resigned person is
+ * "retained, never hard-deleted", and the foreign keys enforce it: a staff
+ * user's PersonnelProfile, Signatures, Attendance and Authorizations are all
+ * ON DELETE RESTRICT, so deletion is not merely discouraged but impossible
+ * without destroying the ISO 17025 evidence that makes their signed reports
+ * defensible. Deactivation is the offboarding mechanism.
+ *
+ * Effect is immediate: `getSessionUser` re-reads status from the database on
+ * every request, so an open session stops working on the deactivated user's
+ * next page load, and `src/auth.ts` refuses a fresh sign-in.
+ */
+export async function setUserActive(formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!canDeactivateUser(actor.designation))
+    throw new Error("Not permitted to change account status.");
+
+  const userId = String(formData.get("userId") ?? "");
+  const activate = String(formData.get("activate") ?? "") === "true";
+
+  // Locking yourself out would need another admin to undo, so refuse it.
+  if (userId === actor.id)
+    throw new Error("You cannot change the status of your own account.");
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      status: true,
+      facilityId: true,
+      sectionId: true,
+      profile: { select: { approvedByCooAt: true } },
+    },
+  });
+  if (!target) throw new Error("User not found.");
+
+  // Reactivating someone who never finished onboarding must not skip approval:
+  // send them back to the step they were at rather than straight to ACTIVE.
+  const restored = target.profile?.approvedByCooAt ? "ACTIVE" : "PENDING_APPROVAL";
+  const status = activate ? restored : "NON_ACTIVE";
+  if (status === target.status) return;
+
+  await prisma.user.update({ where: { id: userId }, data: { status } });
+
+  await writeAudit({
+    actorId: actor.id,
+    action: "UPDATE",
+    entityType: "User",
+    entityId: userId,
+    before: { status: target.status },
+    after: { status },
+    facilityId: target.facilityId,
+    sectionId: target.sectionId,
+  });
+
+  revalidatePath(`/app/personnel/${userId}`);
   revalidatePath("/app/personnel");
 }

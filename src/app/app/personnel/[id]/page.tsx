@@ -3,12 +3,13 @@ import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import {
   canApproveProfile,
+  canDeactivateUser,
   canEvaluateCompetence,
   canGrantAuthorization,
   isAdmin,
   isPortalUser,
 } from "@/lib/auth/perms";
-import { approveProfile } from "@/lib/actions/personnel";
+import { approveProfile, setUserActive } from "@/lib/actions/personnel";
 import { ProfileSection } from "./profile-section";
 import { EducationSection } from "./education-section";
 import { ExperienceSection } from "./experience-section";
@@ -88,6 +89,10 @@ export default async function PersonnelDetailPage({
   const p = person.profile;
   const canApprove =
     canApproveProfile(user.designation) && person.status === "PENDING_APPROVAL";
+  // Offboarding. Never offered for your own account — locking yourself out would
+  // need a second admin to undo, so the action refuses it server-side too.
+  const canSetActive = canDeactivateUser(user.designation) && user.id !== person.id;
+  const isDeactivated = person.status === "NON_ACTIVE";
   const canEvaluate = canEvaluateCompetence(user.designation);
   const canGrant = canGrantAuthorization(user.designation);
 
@@ -510,12 +515,32 @@ export default async function PersonnelDetailPage({
         <Badge>{person.status}</Badge>
       </div>
 
-      {canApprove && (
-        <form action={approveProfile}>
-          <input type="hidden" name="userId" value={person.id} />
-          <Button type="submit">Approve &amp; activate (COO)</Button>
-        </form>
+      {isDeactivated && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This account is deactivated. They cannot sign in, and any open session
+          stops working on their next page load. The record is retained — their
+          signatures, results and audit history stay intact and attributable.
+        </p>
       )}
+
+      <div className="flex flex-wrap gap-2">
+        {canApprove && (
+          <form action={approveProfile}>
+            <input type="hidden" name="userId" value={person.id} />
+            <Button type="submit">Approve &amp; activate (COO)</Button>
+          </form>
+        )}
+
+        {canSetActive && (
+          <form action={setUserActive}>
+            <input type="hidden" name="userId" value={person.id} />
+            <input type="hidden" name="activate" value={isDeactivated ? "true" : "false"} />
+            <Button type="submit" variant={isDeactivated ? "default" : "destructive"}>
+              {isDeactivated ? "Reactivate account" : "Deactivate account"}
+            </Button>
+          </form>
+        )}
+      </div>
 
       <Tabs tabs={tabs} defaultTab="profile" />
     </div>

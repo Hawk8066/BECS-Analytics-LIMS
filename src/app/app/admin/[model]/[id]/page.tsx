@@ -29,8 +29,12 @@ export default async function EditRecordPage({
   if (!row) notFound();
 
   // Pre-fill values per field type (datetime needs the datetime-local format).
+  // Editable fields only: `initial` is handed to a client component, so anything
+  // in it is serialised into the page payload whether or not an input renders it.
+  // User.passwordHash is non-editable precisely so it never reaches the browser.
   const initial: Record<string, string> = {};
   for (const f of model.fields) {
+    if (!f.editable) continue;
     initial[f.name] =
       f.type === "datetime" ? toDatetimeLocal(row[f.name]) : displayValue(row[f.name]);
   }

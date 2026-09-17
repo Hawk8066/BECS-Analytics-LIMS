@@ -53,6 +53,7 @@ export const CAPABILITIES = [
   // --- Personnel & authorization ---------------------------------------------
   { key: "managePersonnel", group: "Personnel", label: "Create/edit personnel profile shells", defaults: [OM, COO] },
   { key: "approveProfile", group: "Personnel", label: "Approve a profile (activates the account)", defaults: [COO] },
+  { key: "deactivateUser", group: "Personnel", label: "Deactivate / reactivate a staff account", defaults: [COO] },
   { key: "manageFunctions", group: "Personnel", label: "Create/edit Functions", defaults: [OM, COO] },
   { key: "approveFunction", group: "Personnel", label: "Approve a Function", defaults: [COO] },
   { key: "evaluateCompetence", group: "Personnel", label: "Record competence evaluations", defaults: [OM, COO, RYK] },
