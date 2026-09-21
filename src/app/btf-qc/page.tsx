@@ -26,8 +26,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BookLotButton } from "./book-lot-button";
-import { NewProductTypeButton } from "./new-product-type-button";
-import { NewParameterButton } from "./new-parameter-button";
 import { ResultForm } from "./result-form";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -275,7 +273,7 @@ export default async function ProductionPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const [products, lots, analystUsers, parameters] = await Promise.all([
+  const [products, lots, analystUsers] = await Promise.all([
     prisma.productType.findMany({
       orderBy: { sortOrder: "asc" },
       include: { parentType: { select: { name: true } } },
@@ -298,25 +296,9 @@ export default async function ProductionPage() {
       select: { id: true, email: true, profile: { select: { fullName: true } } },
       orderBy: { email: "asc" },
     }),
-    // Only approved parameters are offerable as a billing rate — the same
-    // filter the monthly-invoice screen applies. Admin-only, so skip the query
-    // for everyone else.
-    canAdminister(user.designation)
-      ? prisma.parameter.findMany({
-          where: { approvedAt: { not: null } },
-          select: { id: true, name: true, matrix: true, price: true },
-          orderBy: [{ name: "asc" }, { matrix: "asc" }],
-        })
-      : Promise.resolve([]),
   ]);
 
   const isAdminUser = canAdminister(user.designation);
-  // Feed the parameter form the matrices/units already in use, so an admin
-  // picks an existing one rather than inventing a near-duplicate.
-  const usedMatrices = [
-    ...new Set(parameters.map((p) => p.matrix).filter((m): m is string => !!m)),
-  ].sort();
-  const parentOptions = products.map((p) => ({ id: p.id, name: p.name }));
 
   const analysts: Analyst[] = analystUsers.map((a) => ({
     id: a.id,
@@ -352,45 +334,12 @@ export default async function ProductionPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Production QC &amp; Traceability</h1>
-          <p className="text-sm text-muted-foreground">
-            Lab Manager books &amp; assigns; the analyst submits results; the Lab
-            Manager reviews. Raw Zinc (vehicle) → AOM (batch) → Zabardast Urea.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/btf-qc/dashboard"
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-          >
-            Dashboard
-          </Link>
-          {canManageProductionQc(user.designation) && (
-            <Link
-              href="/btf-qc/performance"
-              className={buttonVariants({ size: "sm", variant: "outline" })}
-            >
-              Performance
-            </Link>
-          )}
-          <Link
-            href="/btf-qc/reports"
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-          >
-            Monthly reports
-          </Link>
-          {isAdminUser && (
-            <>
-              <NewParameterButton matrices={usedMatrices} />
-              <NewProductTypeButton
-                parents={parentOptions}
-                parameters={parameters}
-              />
-            </>
-          )}
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold">Production QC &amp; Traceability</h1>
+        <p className="text-sm text-muted-foreground">
+          Lab Manager books &amp; assigns; the analyst submits results; the Lab
+          Manager reviews. Raw Zinc (vehicle) → AOM (batch) → Zabardast Urea.
+        </p>
       </div>
 
       {tabs.length === 0 ? (
@@ -399,15 +348,15 @@ export default async function ProductionPage() {
             No product types configured.
           </p>
           {isAdminUser ? (
-            <div className="mt-3 flex justify-center">
-              <NewProductTypeButton
-                parents={parentOptions}
-                parameters={parameters}
-              />
-            </div>
+            <Link
+              href="/btf-qc/settings"
+              className={buttonVariants({ size: "sm", className: "mt-3" })}
+            >
+              Add one in Settings
+            </Link>
           ) : (
             <p className="mt-1 text-xs text-muted-foreground">
-              An application administrator adds these.
+              An application administrator adds these in Settings.
             </p>
           )}
         </div>

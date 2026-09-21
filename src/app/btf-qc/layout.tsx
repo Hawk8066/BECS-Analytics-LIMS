@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
-import { canAccessProductionQc } from "@/lib/auth/perms";
+import {
+  canAccessProductionQc,
+  canAdminister,
+  canManageProductionQc,
+} from "@/lib/auth/perms";
 import { designationLabel } from "@/lib/labels";
 import { BecsLogo } from "@/components/becs-logo";
+import { QcSidebar } from "./qc-sidebar";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "../app/actions";
 
@@ -44,7 +49,17 @@ export default async function BtfQcLayout({
           </form>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 p-6">{children}</main>
+      <div className="flex flex-1">
+        <QcSidebar
+          canManage={canManageProductionQc(user.designation)}
+          isAdmin={canAdminister(user.designation)}
+        />
+        {/* min-w-0 so a wide table scrolls inside main rather than forcing the
+            whole page wider and pushing the sidebar off-screen. */}
+        <main className="min-w-0 flex-1 p-6">
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
