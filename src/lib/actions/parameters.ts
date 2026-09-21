@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { canManageParameters, canApproveParameter } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { rupeesToPaisa } from "@/lib/money";
+import { createParameterRecord } from "@/lib/parameters/create";
 
 export type FormState = { error?: string; ok?: boolean };
 
@@ -62,48 +63,25 @@ export async function createParameter(
     return { error: err instanceof Error ? err.message : "Invalid price." };
   }
 
-  const approvedAt = canApproveParameter(actor.designation) ? new Date() : null;
-  const p = await prisma.$transaction(async (tx) => {
-    const created = await tx.parameter.create({
-      data: {
+  const { created: p, approvedAt } = await prisma.$transaction((tx) =>
+    createParameterRecord(
+      tx,
+      {
         name: d.name,
-        unit: d.unit || null,
         matrix,
-        method: d.method || null,
-        lod: d.lod || null,
-        loq: d.loq || null,
+        unit: d.unit,
+        method: d.method,
+        lod: d.lod,
+        loq: d.loq,
         accredited: !!d.accredited,
         price,
         urgentPrice,
         tatDays: toDays(d.tatDays),
         tatUrgentDays: toDays(d.tatUrgentDays),
-        createdById: actor.id,
-        approvedAt,
       },
-    });
-
-    // Log each rate that was set, so the price is dated from the start.
-    const entries = (
-      [
-        ["NORMAL", price],
-        ["URGENT", urgentPrice],
-      ] as const
-    ).filter(([, value]) => value !== null);
-    if (entries.length > 0) {
-      await tx.parameterPriceHistory.createMany({
-        data: entries.map(([priority, value]) => ({
-          parameterId: created.id,
-          priority,
-          oldPrice: null,
-          price: value,
-          source: "MANUAL" as const,
-          changedById: actor.id,
-        })),
-      });
-    }
-
-    return created;
-  });
+      actor,
+    ),
+  );
 
   await writeAudit({
     actorId: actor.id,

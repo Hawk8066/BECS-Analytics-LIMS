@@ -8,6 +8,7 @@ import {
   canApproveLot,
   canSubmitResult,
   ANALYST_DESIGNATIONS,
+  canAdminister,
 } from "@/lib/auth/perms";
 import { decideLot, setProductSpec, reassignLot } from "@/lib/actions/production-qc";
 import { formatDate } from "@/lib/format";
@@ -297,6 +298,8 @@ export default async function ProductionPage() {
     }),
   ]);
 
+  const isAdminUser = canAdminister(user.designation);
+
   const analysts: Analyst[] = analystUsers.map((a) => ({
     id: a.id,
     name: a.profile?.fullName ?? a.email,
@@ -331,40 +334,32 @@ export default async function ProductionPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Production QC &amp; Traceability</h1>
-          <p className="text-sm text-muted-foreground">
-            Lab Manager books &amp; assigns; the analyst submits results; the Lab
-            Manager reviews. Raw Zinc (vehicle) → AOM (batch) → Zabardast Urea.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/btf-qc/dashboard"
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-          >
-            Dashboard
-          </Link>
-          {canManageProductionQc(user.designation) && (
-            <Link
-              href="/btf-qc/performance"
-              className={buttonVariants({ size: "sm", variant: "outline" })}
-            >
-              Performance
-            </Link>
-          )}
-          <Link
-            href="/btf-qc/reports"
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-          >
-            Monthly reports
-          </Link>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold">Production QC &amp; Traceability</h1>
+        <p className="text-sm text-muted-foreground">
+          Lab Manager books &amp; assigns; the analyst submits results; the Lab
+          Manager reviews. Raw Zinc (vehicle) → AOM (batch) → Zabardast Urea.
+        </p>
       </div>
 
       {tabs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No product types configured.</p>
+        <div className="rounded-md border border-dashed p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No product types configured.
+          </p>
+          {isAdminUser ? (
+            <Link
+              href="/btf-qc/settings"
+              className={buttonVariants({ size: "sm", className: "mt-3" })}
+            >
+              Add one in Settings
+            </Link>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              An application administrator adds these in Settings.
+            </p>
+          )}
+        </div>
       ) : (
         <Tabs tabs={tabs} />
       )}

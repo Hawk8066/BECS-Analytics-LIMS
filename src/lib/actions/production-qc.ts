@@ -8,13 +8,28 @@ import {
   canManageProductionQc,
   canApproveLot,
   canSubmitResult,
+  canAdminister,
   ANALYST_DESIGNATIONS,
 } from "@/lib/auth/perms";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publish } from "@/lib/feed/publish";
 import { nextNumber } from "@/lib/numbering";
+import { rupeesToPaisa } from "@/lib/money";
+import { uniqueViolation } from "@/lib/db/errors";
+import {
+  createParameterRecord,
+  type NewParameterInput,
+} from "@/lib/parameters/create";
+import { NEW_PARAMETER } from "@/lib/parameters/constants";
 
 export type FormState = { error?: string };
+
+/** Like FormState, plus which field to mark invalid and a success flag. */
+export type ProductTypeFormState = {
+  error?: string;
+  ok?: boolean;
+  field?: string;
+};
 
 // An assignee must be an active RYK analyst.
 async function isRykAnalyst(userId: string): Promise<boolean> {
@@ -285,4 +300,135 @@ export async function setProductSpec(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/btf-qc");
+}
+
+// --- Product types (ADMIN only) ---------------------------------------------
+
+const PRODUCT_STAGES = ["RAW", "INTERMEDIATE", "FINISHED"] as const;
+const LOT_BASES = ["VEHICLE", "BATCH"] as const;
+
+/**
+ * Create a QC product type, optionally creating and linking the Parameter it is
+ * billed at in the same transaction.
+ *
+ * Restricted to ADMIN (`canAdminister`), which is hard-wired to the designation
+ * and deliberately not reassignable. Note this is a narrower gate than the rest
+ * of this file, which uses `canManageProductionQc` (RYK Lab Manager / OM / COO)
+ * — defining a product line is a setup decision, not day-to-day QC work.
+ */
+export async function createProductType(
+  _prev: ProductTypeFormState,
+  formData: FormData,
+): Promise<ProductTypeFormState> {
+  const actor = await requireUser();
+  if (!canAdminister(actor.designation))
+    return { error: "Only an application administrator can add product types." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required.", field: "name" };
+
+  const testParameter = String(formData.get("testParameter") ?? "").trim();
+  if (!testParameter)
+    return { error: "Test parameter is required.", field: "testParameter" };
+
+  // Allow-list the enums rather than trusting the posted string.
+  const stage = String(formData.get("stage") ?? "");
+  if (!PRODUCT_STAGES.includes(stage as (typeof PRODUCT_STAGES)[number]))
+    return { error: "Select a stage.", field: "stage" };
+  const basis = String(formData.get("basis") ?? "");
+  if (!LOT_BASES.includes(basis as (typeof LOT_BASES)[number]))
+    return { error: "Select a lot basis.", field: "basis" };
+
+  const num = (key: string) => {
+    const raw = String(formData.get(key) ?? "").trim();
+    if (!raw) return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Production QC belongs to RYK. Resolved by facility code, NOT the actor's own
+  // facility: an ADMIN sits at Lahore, and stamping that here would create a
+  // product the QC section never shows, because every query there filters on RYK.
+  const facility = await prisma.facility.findFirst({
+    where: { code: "RYK" },
+    select: { id: true },
+  });
+  if (!facility)
+    return { error: "The RYK facility does not exist; seed it before adding products." };
+
+  const parentTypeId = String(formData.get("parentTypeId") ?? "") || null;
+  const parameterChoice = String(formData.get("parameterId") ?? "");
+  const creatingParameter = parameterChoice === NEW_PARAMETER;
+
+  let newParameter: NewParameterInput | null = null;
+  if (creatingParameter) {
+    const pName = String(formData.get("newParameterName") ?? "").trim();
+    if (!pName)
+      return { error: "Name the new parameter.", field: "newParameterName" };
+    let price: number | null;
+    try {
+      price = rupeesToPaisa(String(formData.get("newParameterPrice") ?? ""), "Price");
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Invalid price.",
+        field: "newParameterPrice",
+      };
+    }
+    newParameter = {
+      name: pName,
+      matrix: String(formData.get("newParameterMatrix") ?? "").trim() || null,
+      unit: String(formData.get("newParameterUnit") ?? "").trim() || null,
+      price,
+      urgentPrice: null,
+    };
+  }
+
+  try {
+    const product = await prisma.$transaction(async (tx) => {
+      let parameterId = creatingParameter ? null : parameterChoice || null;
+
+      if (newParameter) {
+        const { created } = await createParameterRecord(tx, newParameter, actor);
+        parameterId = created.id;
+      }
+
+      return tx.productType.create({
+        data: {
+          name,
+          stage: stage as (typeof PRODUCT_STAGES)[number],
+          basis: basis as (typeof LOT_BASES)[number],
+          testParameter,
+          unit: String(formData.get("unit") ?? "").trim() || "%",
+          specMin: num("specMin"),
+          specMax: num("specMax"),
+          parentTypeId,
+          parameterId,
+          facilityId: facility.id,
+        },
+      });
+    });
+
+    await writeAudit({
+      actorId: actor.id,
+      action: "CREATE",
+      entityType: "ProductType",
+      entityId: product.id,
+      after: { name, stage, basis, testParameter, parameterId: product.parameterId },
+      facilityId: facility.id,
+    });
+
+    revalidatePath("/btf-qc");
+    revalidatePath("/btf-qc/reports");
+    return { ok: true };
+  } catch (e) {
+    // @@unique([facilityId, name]) — a repeated product name is data entry,
+    // not a crash, so report it on the field that caused it.
+    const dup = uniqueViolation(e);
+    if (dup)
+      return {
+        error: dup.field === "name" ? "A product with that name already exists." : dup.message,
+        field: dup.field ?? undefined,
+      };
+    throw e;
+  }
 }
