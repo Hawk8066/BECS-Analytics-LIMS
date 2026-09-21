@@ -5,6 +5,7 @@ import { canAdminister } from "@/lib/auth/perms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewProductTypeButton } from "../new-product-type-button";
 import { NewParameterButton } from "../new-parameter-button";
+import { LotBulkTools } from "./lot-bulk";
 
 /**
  * Production QC setup — defining what is tested and what it is billed at.
@@ -118,6 +119,8 @@ export default async function QcSettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <LotBulkTools hasProducts={products.length > 0} />
     </div>
   );
 }
