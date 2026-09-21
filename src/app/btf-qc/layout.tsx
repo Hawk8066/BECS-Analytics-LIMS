@@ -7,6 +7,10 @@ import {
   canManageProductionQc,
 } from "@/lib/auth/perms";
 import { designationLabel } from "@/lib/labels";
+import { getFeedSnapshot } from "@/lib/feed/query";
+import { FeedProvider } from "@/components/feed/feed-provider";
+import { NotificationBell } from "@/components/feed/notification-bell";
+import { NewsReel } from "@/components/feed/news-reel";
 import { BecsLogo } from "@/components/becs-logo";
 import { QcSidebar } from "./qc-sidebar";
 import { Button } from "@/components/ui/button";
@@ -25,7 +29,14 @@ export default async function BtfQcLayout({
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
   if (!canAccessProductionQc(user.designation)) redirect("/app");
 
+  // QC staff already receive notifications — production-qc.ts publishes to the
+  // assigned analyst when a lot is booked or decided — but until now they could
+  // only read them by leaving for /app. Server-rendering the first snapshot
+  // avoids an empty-bell flash; the client then polls /api/feed for deltas.
+  const feed = await getFeedSnapshot(user);
+
   return (
+    <FeedProvider initial={feed}>
     <div className="flex min-h-svh flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
         <BecsLogo subtitle="BTF Quality Control · BECS RYK" />
@@ -36,6 +47,7 @@ export default async function BtfQcLayout({
               {designationLabel(user.designation)}
             </div>
           </div>
+          <NotificationBell />
           <Link
             href="/app"
             className="text-sm text-muted-foreground hover:text-foreground hover:underline"
@@ -56,10 +68,14 @@ export default async function BtfQcLayout({
         />
         {/* min-w-0 so a wide table scrolls inside main rather than forcing the
             whole page wider and pushing the sidebar off-screen. */}
-        <main className="min-w-0 flex-1 p-6">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <NewsReel />
+          <main className="min-w-0 flex-1 p-6">
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
+          </main>
+        </div>
       </div>
     </div>
+    </FeedProvider>
   );
 }

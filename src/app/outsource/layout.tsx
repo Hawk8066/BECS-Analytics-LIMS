@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
+import { pendingCount, requireOutsourceLab } from "@/lib/portal/outsource";
+import { OutsourceSidebar } from "./portal-sidebar";
 import { BecsLogo } from "@/components/becs-logo";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "../app/actions";
@@ -10,15 +10,15 @@ export default async function OutsourceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
-  if (user.designation !== "OUTSOURCE_LAB" || !user.outsourceLabId)
-    redirect("/app");
+  const { user, labId } = await requireOutsourceLab();
 
-  const lab = await prisma.outsourceLab.findUnique({
-    where: { id: user.outsourceLabId },
-    select: { name: true, labNo: true },
-  });
+  const [lab, pending] = await Promise.all([
+    prisma.outsourceLab.findUnique({
+      where: { id: labId },
+      select: { name: true, labNo: true },
+    }),
+    pendingCount(labId),
+  ]);
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -36,7 +36,12 @@ export default async function OutsourceLayout({
           </form>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 p-6">{children}</main>
+      <div className="flex flex-1">
+        <OutsourceSidebar pending={pending} />
+        <main className="min-w-0 flex-1 p-6">
+          <div className="mx-auto w-full max-w-4xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

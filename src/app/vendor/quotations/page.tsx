@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatDate } from "@/lib/format";
-import { requireVendor, vendorOrders } from "@/lib/portal/vendor";
+import { requireVendor, vendorQuotations } from "@/lib/portal/vendor";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -10,57 +11,66 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PoStatus, pkr } from "./shared";
+import { pkr } from "../shared";
 
-export default async function VendorOrdersPage() {
-  const { vendorId, vendor } = await requireVendor();
-  const orders = await vendorOrders(vendorId);
+export default async function VendorQuotationsPage() {
+  const { vendorId } = await requireVendor();
+  const quotations = await vendorQuotations(vendorId);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Purchase orders</h1>
+        <h1 className="text-2xl font-semibold">My quotations</h1>
         <p className="text-sm text-muted-foreground">
-          Orders raised to {vendor.company}. Open one to see its lines.
+          Quotations you have submitted against purchase requests.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{orders.length} order{orders.length === 1 ? "" : "s"}</CardTitle>
+          <CardTitle className="text-base">
+            {quotations.length} quotation{quotations.length === 1 ? "" : "s"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>PO No</TableHead>
+                  <TableHead>PR No</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Selected</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((o) => (
-                  <TableRow key={o.id}>
+                {quotations.map((q) => (
+                  <TableRow key={q.id}>
                     <TableCell className="font-mono text-xs">
-                      <Link href={`/vendor/po/${o.id}`} className="hover:underline">
-                        {o.poNo}
+                      <Link
+                        href={`/vendor/quotations/${q.id}`}
+                        className="hover:underline"
+                      >
+                        {q.pr.prNo}
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {formatDate(o.createdAt)}
+                      {formatDate(q.createdAt)}
                     </TableCell>
-                    <TableCell>{pkr(o.amount)}</TableCell>
+                    <TableCell>{pkr(q.amount)}</TableCell>
                     <TableCell>
-                      <PoStatus status={o.status} />
+                      {q.selected ? (
+                        <Badge>Selected</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
-                {orders.length === 0 && (
+                {quotations.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No purchase orders yet.
+                      No quotations yet.
                     </TableCell>
                   </TableRow>
                 )}

@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
+import { clientSampleCount } from "@/lib/portal/client";
 import { BecsLogo } from "@/components/becs-logo";
+import { ClientSidebar } from "./portal-sidebar";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "../app/actions";
 
@@ -15,10 +17,13 @@ export default async function PortalLayout({
   // Only external client accounts use the portal; staff go to /app.
   if (user.designation !== "CLIENT" || !user.clientId) redirect("/app");
 
-  const client = await prisma.client.findUnique({
-    where: { id: user.clientId },
-    select: { company: true, clientNo: true },
-  });
+  const [client, samples] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: user.clientId },
+      select: { company: true, clientNo: true },
+    }),
+    clientSampleCount(user.clientId),
+  ]);
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -36,7 +41,12 @@ export default async function PortalLayout({
           </form>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 p-6">{children}</main>
+      <div className="flex flex-1">
+        <ClientSidebar samples={samples} />
+        <main className="min-w-0 flex-1 p-6">
+          <div className="mx-auto w-full max-w-4xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
