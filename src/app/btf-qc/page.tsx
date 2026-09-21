@@ -8,6 +8,7 @@ import {
   canApproveLot,
   canSubmitResult,
   ANALYST_DESIGNATIONS,
+  canAdminister,
 } from "@/lib/auth/perms";
 import { decideLot, setProductSpec, reassignLot } from "@/lib/actions/production-qc";
 import { formatDate } from "@/lib/format";
@@ -25,6 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BookLotButton } from "./book-lot-button";
+import { NewProductTypeButton } from "./new-product-type-button";
+import { NewParameterButton } from "./new-parameter-button";
 import { ResultForm } from "./result-form";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -272,7 +275,7 @@ export default async function ProductionPage() {
   if (!user) redirect("/login");
   if (user.status !== "ACTIVE") redirect("/app/onboarding");
 
-  const [products, lots, analystUsers] = await Promise.all([
+  const [products, lots, analystUsers, parameters] = await Promise.all([
     prisma.productType.findMany({
       orderBy: { sortOrder: "asc" },
       include: { parentType: { select: { name: true } } },
@@ -295,7 +298,25 @@ export default async function ProductionPage() {
       select: { id: true, email: true, profile: { select: { fullName: true } } },
       orderBy: { email: "asc" },
     }),
+    // Only approved parameters are offerable as a billing rate — the same
+    // filter the monthly-invoice screen applies. Admin-only, so skip the query
+    // for everyone else.
+    canAdminister(user.designation)
+      ? prisma.parameter.findMany({
+          where: { approvedAt: { not: null } },
+          select: { id: true, name: true, matrix: true, price: true },
+          orderBy: [{ name: "asc" }, { matrix: "asc" }],
+        })
+      : Promise.resolve([]),
   ]);
+
+  const isAdminUser = canAdminister(user.designation);
+  // Feed the parameter form the matrices/units already in use, so an admin
+  // picks an existing one rather than inventing a near-duplicate.
+  const usedMatrices = [
+    ...new Set(parameters.map((p) => p.matrix).filter((m): m is string => !!m)),
+  ].sort();
+  const parentOptions = products.map((p) => ({ id: p.id, name: p.name }));
 
   const analysts: Analyst[] = analystUsers.map((a) => ({
     id: a.id,
@@ -360,11 +381,36 @@ export default async function ProductionPage() {
           >
             Monthly reports
           </Link>
+          {isAdminUser && (
+            <>
+              <NewParameterButton matrices={usedMatrices} />
+              <NewProductTypeButton
+                parents={parentOptions}
+                parameters={parameters}
+              />
+            </>
+          )}
         </div>
       </div>
 
       {tabs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No product types configured.</p>
+        <div className="rounded-md border border-dashed p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No product types configured.
+          </p>
+          {isAdminUser ? (
+            <div className="mt-3 flex justify-center">
+              <NewProductTypeButton
+                parents={parentOptions}
+                parameters={parameters}
+              />
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              An application administrator adds these.
+            </p>
+          )}
+        </div>
       ) : (
         <Tabs tabs={tabs} />
       )}
