@@ -140,12 +140,15 @@ export function SidebarLink({
   label,
   icon: Icon,
   exact,
+  badge,
 }: {
   href: string;
   label: string;
   icon: LucideIcon;
   /** Match this path only — for landing pages whose siblings nest beneath it. */
   exact?: boolean;
+  /** Outstanding count. Zero and undefined both render nothing. */
+  badge?: number;
 }) {
   const collapsed = useSidebarCollapsed();
   const pathname = usePathname();
@@ -156,7 +159,9 @@ export function SidebarLink({
       href={href}
       // On the rail the icon is the only visible content, so the link needs an
       // accessible name of its own and a tooltip for sighted users.
-      aria-label={collapsed ? label : undefined}
+      aria-label={
+        collapsed ? (badge ? `${label} (${badge})` : label) : undefined
+      }
       title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
@@ -167,8 +172,32 @@ export function SidebarLink({
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
-      <Icon aria-hidden className="size-4 shrink-0" />
-      {!collapsed && <span className="min-w-0 truncate">{label}</span>}
+      <span className="relative shrink-0">
+        <Icon aria-hidden className="size-4" />
+        {/* On the rail there is no room for a number, so the count degrades to
+            a dot. The label's aria-label already carries the meaning. */}
+        {collapsed && !!badge && (
+          <span
+            aria-hidden
+            className="absolute -right-1 -top-1 size-2 rounded-full bg-primary ring-2 ring-muted"
+          />
+        )}
+      </span>
+      {!collapsed && (
+        <>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {!!badge && (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 text-xs tabular-nums",
+                active ? "bg-primary-foreground/20" : "bg-muted-foreground/15",
+              )}
+            >
+              {badge}
+            </span>
+          )}
+        </>
+      )}
     </Link>
   );
 }

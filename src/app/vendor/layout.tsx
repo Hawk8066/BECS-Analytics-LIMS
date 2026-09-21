@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
+import { vendorCounts } from "@/lib/portal/vendor";
 import { BecsLogo } from "@/components/becs-logo";
+import { VendorSidebar } from "./portal-sidebar";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "../app/actions";
 
@@ -14,10 +16,13 @@ export default async function VendorLayout({
   if (!user) redirect("/login");
   if (user.designation !== "VENDOR" || !user.vendorId) redirect("/app");
 
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: user.vendorId },
-    select: { company: true, vendorNo: true },
-  });
+  const [vendor, counts] = await Promise.all([
+    prisma.vendor.findUnique({
+      where: { id: user.vendorId },
+      select: { company: true, vendorNo: true },
+    }),
+    vendorCounts(user.vendorId),
+  ]);
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -35,7 +40,12 @@ export default async function VendorLayout({
           </form>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 p-6">{children}</main>
+      <div className="flex flex-1">
+        <VendorSidebar openOrders={counts.orders} quotations={counts.quotations} />
+        <main className="min-w-0 flex-1 p-6">
+          <div className="mx-auto w-full max-w-4xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
